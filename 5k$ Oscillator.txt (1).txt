@@ -1,0 +1,510 @@
+//@version=4
+
+
+study("TDI - Traders Dynamic Index + RSI Divergences + Buy/Sell Signals", shorttitle="5k$ Oscillator")
+////////////////////////////////// Content From Việt NAM ////////////////////////
+if barstate.isfirst
+    var table errorBox = table.new(position.bottom_right, 1, 1, bgcolor = color.new(#1500f8, 100))
+    table.cell(errorBox,  0,  0,  "© Chén Thánh From VN",   text_color = color.rgb(255, 4, 4), text_halign = text.align_center, text_size = size.normal)
+
+///VSA start 
+ShowVSA = input(false, 'VSA', group = 'ON/OFF')
+showMA =                input(defval=true,  title="Show Volume Moving Average", group = 'VSA')
+sizeVSA = input(35,'kích thước vol so với khung',group = 'VSA',tooltip = 'Hiển thị của vol so với thang 100\nNếu = 0 thì sẽ hiển thị giá trị gốc') 
+lengthVolumeMA =        input(defval=20,    title="Length of MA applied on Volume",     type=input.integer, group = 'VSA')
+ratioUltraVolume =      input(defval=2.2,   title="Ultra High Volume Ratio",            type=input.float, group = 'VSA')
+ratioVeryHighVolume =   input(defval=1.8,   title="Very High Volume Ratio",             type=input.float, group = 'VSA')
+ratioHighVolume =       input(defval=1.2,   title="High Volume Ratio",                  type=input.float, group = 'VSA')
+ratioNormalVolume =     input(defval=0.8,   title="Normal Volume Ratio",                type=input.float, group = 'VSA')
+ratioLowVolume =        input(defval=0.4,   title="Low Volume Ratio",                   type=input.float, group = 'VSA')
+ratioVeryLowVolume =    input(defval=0.4,   title="Very Low Volume Ratio",              type=input.float, group = 'VSA')
+
+findSizeVol() =>
+	highestVolume = 0.
+	size = 0.
+	for i = 0 to 499
+		// Lấy giá trị volume của từng nến
+		volumeValue = volume[i]
+		
+		// So sánh và cập nhật giá trị lớn nhất
+		if volumeValue > highestVolume
+			highestVolume := volumeValue		
+	
+	size := sizeVSA!=0?highestVolume/sizeVSA:1
+	size
+
+// WILDERS MA
+float volumeMA  = 0
+volumeMA := nz(volumeMA[1]) + (volume-nz(volumeMA[1])) / lengthVolumeMA
+
+
+ultraHighVolumeMin   = volumeMA * ratioUltraVolume
+veryHighVolumeMin    = volumeMA * ratioVeryHighVolume
+highVolumeMin        = volumeMA * ratioHighVolume
+normalVolumeMin      = volumeMA * ratioNormalVolume
+lowVolumeMin         = volumeMA * ratioLowVolume
+veryLowVolumeMin     = volumeMA * ratioVeryLowVolume
+
+
+volUltraHigh        = volume >= ultraHighVolumeMin                                      ? true : false
+volVeryHigh         = volume >= veryHighVolumeMin   and volume < ultraHighVolumeMin     ? true : false
+volHigh             = volume >= highVolumeMin       and volume < veryHighVolumeMin      ? true : false
+volNormal           = volume >= normalVolumeMin     and volume < highVolumeMin          ? true : false
+volLow              = volume >= lowVolumeMin        and volume < normalVolumeMin        ? true : false
+volVeryLow          = volume < lowVolumeMin                                             ? true : false
+
+
+
+
+palette = volUltraHigh ? color.purple : volVeryHigh ? color.purple : volHigh ? color.orange : volNormal ? color.silver: volLow ? color.silver : color.silver
+plot(ShowVSA?volume/findSizeVol():na, color = palette, style=plot.style_columns, title="Volume", transp=0)
+plot(showMA and ShowVSA ? volumeMA/findSizeVol() : na, style=plot.style_line, color=color.green, title="Volume MA")
+// VSA END
+
+// Market Cipher B
+// Get user input
+//version       = input.string("2024", "Version")
+showMarketCipher = input(false, 'Market cipher ON/OFF', group = 'ON/OFF',inline = 'overlayLine1')
+showGreenWave = input(true, 'Green wave ON/OFF', group = 'ON/OFF',tooltip = 'Khung thời gian sử dụng <= H1\nH1(wr: 78%(48/61))\nM15(wr: 81%(81/100)')
+showGreenWaveColorChange = input(false, 'Green wave change color ON/OFF', group = 'ON/OFF',tooltip = 'màu sóng tăng giảm như AO')
+
+sizeGW = input(1,'size Green Wave',tooltip = 'size = 1 thì giữ nguyên hệ số',group = 'Market Cipher B')
+show_rsi      = input(false, title = 'Show RSI?')
+useCurrentRes = input(true, title = "Use Current Chart Resolution?",group = 'Market Cipher B')
+customRes     = input("60", "Use Current Chart Resolution?",group = 'Market Cipher B')
+obLevel1      = input(60, "Over Bought Level 1",group = 'Market Cipher B')
+trigger1      = input(53, "Trigger 1",group = 'Market Cipher B')
+osLevel1      = input(-60, "Over Sold Level 1",group = 'Market Cipher B')
+trigger2      = input(-53, "Trigger 2",group = 'Market Cipher B')
+multGW = input(60,'Mult Green wave',group = 'Market Cipher B')
+multGW_fast = input(40,'Mult Green wave fast',group = 'Market Cipher B')
+
+PeroidGW = input(200,'Peroid length Green wave',group = 'Market Cipher B')
+// Functions
+tb = input(3,'bw2 length',group = 'Market Cipher B')
+blueWaves_vwap(src, chlLen, avgLen) =>
+    esa = ema(src, chlLen)
+    d = ema(abs(src - esa), chlLen)
+    ci = (src - esa) / (0.015 * d)
+    bw1 = ema(ci, avgLen)
+    bw2 = sma(bw1, tb)
+    vwap = bw1 - bw2
+    [bw1, bw2, vwap]
+moneyFlowFunc(period, mult, y) => sma(((close - open) / (high - low)) * mult, period) - y
+fat = input(9,'fast',group = 'Market Cipher B')
+slow = input(12,'slow',group = 'Market Cipher B')
+
+// Get components
+cond(_offset) =>
+    [bw1, bw2, vwap] = blueWaves_vwap(hlc3, fat, slow)
+    moneyFlow = moneyFlowFunc(multGW, PeroidGW, 2.25)*sizeGW
+    rsiMod    = sma(stoch(close, high, low, 40), 2)
+    stcRsiMod = sma(stoch(close, high, low, 81), 2)
+    [bw1[_offset], bw2[_offset], vwap[_offset], moneyFlow[_offset], rsiMod[_offset], stcRsiMod[_offset]]
+tf = timeframe.period
+[bw1, bw2, vwap, moneyFlow, rsiMod, stcRsiMod] = security(syminfo.tickerid, tf, cond(1))
+// log(moneyFlow)
+moneyFlowFast = moneyFlowFunc(multGW_fast, PeroidGW, 2.25)*sizeGW
+// moneyFlow = security(syminfo.tickerid, tf, cond(not useCurrentRes and barstate.isrealtime ? 1 : 0))
+// Plots
+// plot(vwap, "VWAP", color.new(#ffe500, 55), 2, plot.style_area)
+// plot(sma(moneyFlow, 3), "Money Flow", moneyFlow > 0 ? color.new(#4cd853, 20) : color.new(#c73d33, 20), 2, plot.style_area)
+
+
+plot(showMarketCipher?bw1:na, "Lt Blue Wave", #90f9a34b, 1, plot.style_area)
+plot(showMarketCipher?bw2:na, "Blue Wave", color.new(#0d48a1, 71), 1, plot.style_area)
+// plot(showMarketCipher?vwap:na, "VWAP", color.new(#ffe500, 55), 2, plot.style_area)
+smoothMF = ema(moneyFlow,3)
+diff = showGreenWaveColorChange?smoothMF - smoothMF[1]:moneyFlow
+plot(showGreenWave?ema(moneyFlow,3):na, "Money Flow Slow color", diff >= 0 ? color.rgb(0, 150, 135, 48) : color.rgb(244, 67, 54, 43), 2, plot.style_columns)
+plot(showGreenWave?ema(moneyFlowFast,3):na, "Money Flow Fast color", moneyFlowFast > 0 ? color.rgb(172, 57, 193) : #0015ff, 2, plot.style_line)
+
+
+plot(crossover(bw1, bw2) and showMarketCipher ? bw2 : na, "Blue Wave Crossing UP", color.new(#00E676, 15), 3, plot.style_circles)
+plot(crossunder(bw1, bw2) and showMarketCipher? bw2 : na, "Blue Wave Crossing Down", color.new(#FF5252, 15), 3, plot.style_circles)
+plot(showMarketCipher?0:na, "Zero", color.rgb(0, 0, 0))
+plot(showMarketCipher?100:na, "100%", color.new(color.white, 50), 1, plot.style_line)
+plot(showMarketCipher?obLevel1:na, "OB 1 Solid", color.new(#191818, 50), 1, plot.style_line)
+plot(showMarketCipher?osLevel1:na, "OS 1 Solid", color.new(#000000, 50), 1, plot.style_line)
+plot(showMarketCipher?trigger1:na, "Trigger 1", color.new(#000000, 50), 1, plot.style_line)
+plot(showMarketCipher?trigger2:na, "Trigger 2", color.new(#000000, 50), 1, plot.style_line)
+plot( show_rsi and  showMarketCipher? rsiMod : na, "RSI", #e600e6, 1)
+plot( show_rsi and  showMarketCipher? stcRsiMod : na, "Sto RSI", rsiMod > stcRsiMod ? #3fff00 : #ff0000, 1)
+
+
+// Alerts
+alertcondition(crossover(bw1, bw2), "Blue Wave Crossing Down [Sm. Red Dot]", "Blue Wave Crossing Down")
+alertcondition(crossunder(bw1, bw2), "Blue Wave Crossing UP [Sm. Green Dot]", "Blue Wave Crossing UP")
+/// Market cipher B end
+
+///TDI start
+showTDI = input(true, 'TDI ON/OFF', group = 'ON/OFF',inline = 'overlayLine1')
+
+rsiPeriod = input(14, minval = 1, title = "RSI Period",group = '---------- TDI  ----------')
+bandLength = input(34, minval = 1, title = "Band Length",group = '---------- TDI ----------')
+lengthrsipl = input(7, minval = 0, title = "Fast MA on RSI",group = '---------- TDI ----------')
+lengthtradesl = input(2, minval = 1, title = "Slow MA on RSI",group = '---------- TDI ----------')
+BBstdv =input(1.6185, minval = 1, title = "STDV BB",group = '---------- TDI ----------')
+shark = input(true,'Show sharkfin',group = '---------- TDI ----------')
+src1 = close                                                             // Source of Calculations (Close of Bar)
+r = rsi(src1, rsiPeriod)                                                 // RSI of Close
+ma = sma(r, bandLength)                                                 // Moving Average of RSI [current]
+offs = (BBstdv * stdev(r, bandLength))                                  // Offset
+up = ma + offs                                                          // Upper Bands
+dn = ma - offs                                                          // Lower Bands
+mid = (up + dn) / 2                                                     // Average of Upper and Lower Bands
+mbb = sma(r, lengthrsipl)                                            // Moving Average of RSI 2 bars back
+mab = sma(r, lengthtradesl)                                          // Moving Average of RSI 7 bars back
+
+
+hline(showTDI?20:na, color=color.rgb(255, 82, 82, 52), linewidth=1, linestyle=hline.style_dotted)
+hline(showTDI?32:na, color=color.rgb(255, 82, 82, 55), linewidth=1, linestyle=hline.style_dotted)
+
+hline(showTDI?50:na, color=color.rgb(54, 58, 69, 55), linewidth=1, linestyle=hline.style_dotted)
+hline(showTDI?68:na, color=color.rgb(76, 175, 79, 49), linewidth=1, linestyle=hline.style_dotted)
+hline(showTDI?80:na, color=color.rgb(76, 175, 79, 49), linewidth=1, linestyle=hline.style_dotted)
+
+// Plot the TDI
+upl=plot(showTDI?up:na, color=#171717a3, transp=60, title="VB Channel High",linewidth=1)
+dnl=plot(showTDI?dn:na, color=#171717a3, transp=60, title="VB Channel Low",linewidth=1)
+midl=plot(showTDI?mid:na, color= mab>mid and mbb > mid?color.green:color.red, transp=40, linewidth=2, title="MBL")
+
+mabl=plot(showTDI?mab:na, color=mab>68?color.red:mab<32?color.green: color.rgb(0, 0, 0), transp=30, linewidth=2, title="RSI PL")
+mbbl=plot(showTDI?mbb:na, color=color.red, transp=60, linewidth=1, title="TSL Signal")
+
+// Sharkfin Breakout out of the Bands
+plotshape(shark and crossunder(mab,up) and showTDI? up : na, title='SharkFin/Hook Short+', color=color.new(color.orange, 15), style=shape.cross, location=location.absolute, size=size.small)
+
+plotshape(shark and crossover(mab,dn) and showTDI? dn : na, title='SharkFin/Hook Long+', color=color.new(color.green, 15), style=shape.cross, location=location.absolute, size=size.small)
+
+//
+//create RSI TSL cloud to indicate trend direction.
+fill(mabl,upl, color=mab>up and showTDI?color.red:na,transp=80)
+fill(mabl,dnl, color=mab<dn and showTDI?color.green:na,transp=80)
+// fill(upl, midl, color.green, transp=95)                                   
+// fill(midl, dnl, color.red, transp=95)        
+
+
+//long/short labels
+
+long1= crossover(mab, mbb) and mbb > mid and mbb > 50
+short1= crossunder(mab, mbb) and mbb < mid and mbb < 50
+
+// plotshape(long1, style=shape.labelup, location=location.bottom, color=color.lime, size=size.tiny, editable=true)
+// plotshape(short1, style=shape.labeldown, location=location.top, color=color.red, size=size.tiny, editable=true)
+
+// alertcondition(long1, title='Long', message='Crossover')
+// alertcondition(short1, title='Short', message='Crossunder')
+
+best_setup = crossover(mab, mid) 
+alertcondition(best_setup, title="RSI Crosses Yellow", message="rsi crosses mid")
+alertcondition(crossover(mab,mbb), title="RSI Crosses TSL Signal", message="rsi crosses TSL Signal")
+
+sharkfin_setup_Buy = crossover(mab, up) and mab <= up
+sharkfin_setup_Sell = crossover(mab, dn) and mab >= dn
+alertcondition(sharkfin_setup_Buy or sharkfin_setup_Sell, title="sharkfin_setup", message="sharkfin_setup") 
+
+scalp= mab > mid 
+bgcolor(scalp ? color.rgb(0, 230, 119, 100) : na, transp=95, title = "Backgroud uptrend")
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+// Divergences //
+
+
+len = rsiPeriod
+src = input(title="RSI Source", defval=close, group = 'TDI')
+lbR = input(title="Pivot Lookback Right", defval=4, group = 'TDI')
+lbL = input(title="Pivot Lookback Left", defval=7, group = 'TDI')
+lbR_GW = input(title="Pivot Lookback Right GW", defval=4, group = 'TDI')
+lbL_GW = input(title="Pivot Lookback Left GW", defval=7, group = 'TDI')
+rangeUpper = input(title="Max of Lookback Range", defval=60, group = 'TDI')
+rangeLower = input(title="Min of Lookback Range", defval=5, group = 'TDI')
+plotBull = input(title="Plot Bullish", defval=true, group = 'TDI')
+plotHiddenBull = input(title="Plot Hidden Bullish", defval=true, group = 'TDI')
+plotBear = input(title="Plot Bearish", defval=true, group = 'TDI')
+plotHiddenBear = input(title="Plot Hidden Bearish", defval=true, group = 'TDI')
+bearColor = color.red
+bullColor = color.green
+hiddenBullColor = color.new(#7385ff, 80)
+hiddenBearColor = color.new(color.orange, 80)
+textColor = color.white
+noneColor = color.new(color.white, 100)
+osc = rsi(src, len)
+
+// // plot(osc, title="RSI", linewidth=2, color=#8D1699)
+// hline(50, title="Middle Line", linewidth=2, linestyle=hline.style_dotted)
+// obLevel = hline(70, title="Overbought", linewidth=2, linestyle=hline.style_dotted)
+// osLevel = hline(30, title="Oversold", linewidth=2, linestyle=hline.style_dotted)
+//tim diem pivot
+plFound = na(pivotlow(osc, lbL, lbR)) ? false : true
+phFound = na(pivothigh(osc, lbL, lbR)) ? false : true
+plFound_GW = na(pivotlow(moneyFlow , lbL_GW, lbR_GW)) ? false : true
+phFound_GW = na(pivothigh(moneyFlow , lbL_GW, lbR_GW)) ? false : true
+plFound_GWFast = na(pivotlow(moneyFlowFast , lbL_GW, lbR_GW)) ? false : true
+phFound_GWFast = na(pivothigh(moneyFlowFast , lbL_GW, lbR_GW)) ? false : true
+
+// plFound_GW_6 = na(pivotlow(moneyFlow , lbL-1, lbR)) ? false : true
+// phFound_GW_6 = na(pivothigh(moneyFlow , lbL-1, lbR)) ? false : true
+_inRange(cond) =>
+	bars = barssince(cond == true)
+	rangeLower <= bars and bars <= rangeUpper 
+
+
+//------------------------------------------------------------------------------
+// Regular Bullish
+// Osc: Higher Low
+
+oscHL = osc[lbR] > valuewhen(plFound, osc[lbR], 1) and _inRange(plFound[1])
+oscHL_GW = moneyFlow[lbR_GW] > valuewhen(plFound_GW , moneyFlow[lbR_GW], 1) and _inRange(plFound_GW[1])
+oscHL_GWFast = moneyFlowFast[lbR_GW] > valuewhen(plFound_GWFast , moneyFlowFast[lbR_GW], 1) and _inRange(plFound_GWFast[1])
+
+// Price: Lower Low
+
+priceLL = low[lbR] < valuewhen(plFound, low[lbR], 1)
+priceLL_GW = low[lbR_GW] < valuewhen(plFound_GW, low[lbR_GW], 1)
+priceLL_GWFast = low[lbR_GW] < valuewhen(plFound_GWFast, low[lbR_GW], 1)
+
+bullCond = plotBull and priceLL and oscHL and plFound
+bullCond_GW = plotBull and priceLL_GW and oscHL_GW and plFound_GW
+bullCond_GWFast = plotBull and priceLL_GWFast and oscHL_GWFast and plFound_GWFast
+
+plot(
+     plFound and showTDI? osc[lbR] : na,
+     offset=-lbR,
+     title="Regular Bullish",
+     linewidth=2,
+     color=(bullCond ? bullColor : noneColor),
+     transp=0
+     )
+plot(
+     plFound_GW and showGreenWave? moneyFlow[lbR_GW] : na,
+     offset=-lbR_GW,
+     title="Regular Bullish GW",
+     linewidth=2,
+     color=(bullCond_GW ? bullColor : noneColor),
+     transp=0
+     )
+plot(
+     plFound_GWFast and showGreenWave? moneyFlowFast[lbR_GW] : na,
+     offset=-lbR_GW,
+     title="Regular Bullish GW Fast",
+     linewidth=2,
+     color=(bullCond_GWFast ? #0015ff : noneColor),
+     transp=0
+     )
+// plotshape(
+// 	 bullCond ? osc[lbR] : na,
+// 	 offset=-lbR,
+// 	 title="Regular Bullish Label",
+// 	 text=" Bull ",
+// 	 style=shape.labelup,
+// 	 location=location.absolute,
+// 	 color=bullColor,
+// 	 textcolor=textColor,
+// 	 transp=0
+// 	 )
+
+//------------------------------------------------------------------------------
+// Hidden Bullish
+// Osc: Lower Low
+
+oscLL = osc[lbR] < valuewhen(plFound, osc[lbR], 1) and _inRange(plFound[1])
+
+// Price: Higher Low
+
+priceHL = low[lbR] > valuewhen(plFound, low[lbR], 1)
+hiddenBullCond = plotHiddenBull and priceHL and oscLL and plFound
+
+plot(
+	 plFound and showTDI? osc[lbR] : na,
+	 offset=-lbR,
+	 title="Hidden Bullish",
+	 linewidth=2,
+	 color=(hiddenBullCond ? hiddenBullColor : noneColor),
+	 transp=0
+	 )
+
+// plotshape(
+// 	 hiddenBullCond ? osc[lbR] : na,
+// 	 offset=-lbR,
+// 	 title="Hidden Bullish Label",
+// 	 text=" H Bull ",
+// 	 style=shape.labelup,
+// 	 location=location.absolute,
+// 	 color=bullColor,
+// 	 textcolor=textColor,
+// 	 transp=0
+// 	 )
+
+//------------------------------------------------------------------------------
+// Regular Bearish
+// Osc: Lower High
+
+oscLH = osc[lbR] < valuewhen(phFound, osc[lbR], 1) and _inRange(phFound[1])
+
+// Price: Higher High
+
+priceHH = high[lbR] > valuewhen(phFound, high[lbR], 1)
+
+bearCond = plotBear and priceHH and oscLH and phFound
+
+plot(
+	 phFound and showTDI? osc[lbR] : na,
+	 offset=-lbR,
+	 title="Regular Bearish",
+	 linewidth=2,
+	 color=(bearCond ? bearColor : noneColor),
+	 transp=0
+	 )
+
+
+oscLH_GW = moneyFlow[lbR_GW] < valuewhen(phFound_GW, moneyFlow[lbR_GW], 1) and _inRange(phFound_GW[1])
+
+// Price: Higher High
+/// GW 
+priceHH_GW = high[lbR_GW] > valuewhen(phFound_GW, high[lbR_GW], 1)
+
+bearCond_GW = plotBear and priceHH_GW and oscLH_GW and phFound_GW
+
+plot(
+	 phFound_GW and showGreenWave? moneyFlow[lbR_GW] : na,
+	 offset=-lbR_GW,
+	 title="Regular Bearish GW",
+	 linewidth=2,
+	 color=(bearCond_GW ? bearColor : noneColor),
+	 transp=0
+	 )
+/// GW Fast
+oscLH_GWFast = moneyFlowFast[lbR_GW] < valuewhen(phFound_GWFast, moneyFlowFast[lbR_GW], 1) and _inRange(phFound_GWFast[1])
+
+// Price: Higher High
+
+priceHH_GWFast = high[lbR_GW] > valuewhen(phFound_GWFast, high[lbR_GW], 1)
+
+bearCond_GWFast = plotBear and priceHH_GWFast and oscLH_GWFast and phFound_GWFast
+
+plot(
+	 phFound_GWFast and showGreenWave? moneyFlowFast[lbR_GW] : na,
+	 offset=-lbR_GW,
+	 title="Regular Bearish GW Fast",
+	 linewidth=2,
+	 color=(bearCond_GWFast ? #ac39c1 : noneColor),
+	 transp=0
+	 )
+
+// plotshape(
+// 	 bearCond ? osc[lbR] : na,
+// 	 offset=-lbR,
+// 	 title="Regular Bearish Label",
+// 	 text=" Bear ",
+// 	 style=shape.labeldown,
+// 	 location=location.absolute,
+// 	 color=bearColor,
+// 	 textcolor=textColor,
+// 	 transp=0
+// 	 )
+
+//------------------------------------------------------------------------------
+// Hidden Bearish
+// Osc: Higher High
+
+oscHH = osc[lbR] > valuewhen(phFound, osc[lbR], 1) and _inRange(phFound[1])
+
+// Price: Lower High
+
+priceLH = high[lbR] < valuewhen(phFound, high[lbR], 1)
+
+hiddenBearCond = plotHiddenBear and priceLH and oscHH and phFound
+
+plot(
+	 phFound and showTDI? osc[lbR] : na,
+	 offset=-lbR,
+	 title="Hidden Bearish",
+	 linewidth=2,
+	 color=(hiddenBearCond ? hiddenBearColor : noneColor),
+	 transp=0
+	 )
+
+// plotshape(
+// 	 hiddenBearCond ? osc[lbR] : na,
+// 	 offset=-lbR,
+// 	 title="Hidden Bearish Label",
+// 	 text=" H Bear ",
+// 	 style=shape.labeldown,
+// 	 location=location.absolute,
+// 	 color=bearColor,
+// 	 textcolor=textColor,
+// 	 transp=0
+// 	 )
+
+// super trend
+// plotshape(
+// 	 crossunder(mab,80) ? osc[lbR] : na,
+// 	 offset=-lbR,
+// 	 title="super uptrend",
+// 	 text=" super uptrend ",
+// 	 style=shape.labeldown,
+// 	 location=location.absolute,
+// 	 color=bearColor,
+// 	 textcolor=textColor,
+// 	 transp=0
+// 	 )
+/// CCI EMA Start
+showCCI = input(false, 'CCI ON/OFF', group = 'ON/OFF',inline = 'overlayLine1',tooltip = 'bật cái này thì cho sizeGW = 4, dùng TDI thì = 1')
+
+length1 = input(20, minval=1, title="CCI", group = '---------- CCI  ----------')
+ma_length = input(13, minval=1, title="EMA", group = '---------- CCI  ----------')
+src_cci = input(close, title="Source", group = '---------- CCI  ----------')
+ma1 = sma(src_cci, length1)
+cci1 = (src_cci - ma1) / (0.015 * dev(src_cci, length1))
+//plot(cci1, color=blue, linewidth=2)
+cciShow = cci1> 200? 220: cci1<-200? -220: cci1
+plot(showCCI?cciShow/2:na, linewidth=2, color = (cci1 > ema(cci1, ma_length)) ? #1500d6 : #ffaa00)
+// plot(ema(cci1, ma_length), color=color.green, linewidth=2)
+///Plot
+cci_ema = ema(cci1, ma_length)
+plot(showCCI?cci_ema/2:na, 'CCI EMA color',linewidth=2)
+plotColour = (cci1 > cci_ema) ? #1500d6 : #ffaa00
+// plotCCIEMA = plot(showCCI?cci1:na,'CCI color', color=plotColour, linewidth=2,display = display.none)
+// plotCCIEMA = plot(cci1,'CCI color', color=plotColour, linewidth=2,display = display.none)
+
+band0 = hline(showCCI?200/2:na, color=color.red)
+band1 = hline(showCCI?150/2:na, color=color.blue)
+band2 = hline(showCCI?0:na,title="zero")
+band3 = hline(showCCI?-150/2:na, color=color.blue)
+band4 = hline(showCCI?-200/2:na, color=color.red)
+// fill(band1, band3, color=color.blue, transp=95)
+checkOverSell(type) =>
+	rs = false
+	for i = 0 to 10 
+		/// type = 1 -> oversell
+		if cci1[i] <= -150 and type == 1
+			rs := true
+		/// type = 0 -> over buy
+		if cci1[i] >= 150 and type == 0
+			rs := true
+	rs
+ShowSignal = input(true, 'Signals buy sell', group = 'ON/OFF')
+
+plotshape(crossover(cci1, cci_ema) and checkOverSell(1) and cci_ema < -50 and (bw1 < osLevel1+10 or bw1[1] < osLevel1+10) and ShowSignal, "Buy", shape.triangleup, location.top, #0800ff, size=size.tiny)
+plotshape(crossunder(cci1, cci_ema) and checkOverSell(0) and cci_ema > 50 and bw1 > obLevel1-10  and ShowSignal, "Sell", shape.triangledown, location.top, color.rgb(247, 0, 255), size=size.tiny)
+alertcondition((crossover(cci1, cci_ema) and checkOverSell(1)) or (crossunder(cci1, cci_ema) and checkOverSell(0)),'CCI signals', 'Check phân kỳ hoặc có sharkfin thì đánh')
+plotColour_signal = (cci1 > cci_ema) ? color.new(#4cd853, 75) : color.new(#c73d33, 75)
+p0_cci = plot(showTDI?80:na, "Plot trend signals", color.new(color.white, 100))
+p1_cci = plot(showTDI?90:na, "Plot trend signals", color.new(color.white, 100))
+fill(p0_cci, p1_cci,title = "Plot trend signals", color = plotColour_signal)
+
+// p0_GW = plot(showGreenWave?133:na, "Plot trend signals", color.new(color.white, 100))
+// p1_GW = plot(showGreenWave?155:na, "Plot trend signals", color.new(color.white, 100))
+// fill(p0_GW, p1_GW,title = "Plot trend signals", color = plotColour_signal)	
+/// market cipher B
+// p0 = plot(showGreenWave?-35:na, "Plot", color.new(color.white, 100))
+// p1 = plot(showGreenWave?-25:na, "Plot", color.new(color.white, 100))
+// nếu CCI cross ema and CCI 1 cây nến trước > < 150 thì plow sharkfin_setup
+// nếu CCI > ema thì dải màu xanh
+// plotshape(crossover(bw1, bw2) and bw1 < osLevel1+3 and showGreenWave, "Buy", shape.circle, location.bottom, color.new(#3fff00, 50), size=size.tiny)
+// plotshape(crossunder(bw1, bw2) and bw1 > obLevel1-3 and showGreenWave, "Sell", shape.circle, location.bottom, #ff000080 ,size=size.tiny)
+
+// fill(p0, p1, moneyFlow > 0 ? color.new(#4cd853, 75) : color.new(#c73d33, 75))

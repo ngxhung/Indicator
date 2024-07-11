@@ -1,0 +1,233 @@
+//@version=4
+study("⩤⩥", shorttitle="◈") 
+///VSA start 
+ShowVSA = input(false, 'VSA', group = 'ON/OFF')
+showMA =                input(defval=true,  title="Show Volume Moving Average", group = 'VSA')
+sizeVSA = input(35,'kích thước vol so với khung',group = 'VSA',tooltip = 'Hiển thị của vol so với thang 100\nNếu = 0 thì sẽ hiển thị giá trị gốc') 
+lengthVolumeMA =        input(defval=20,    title="Length of MA applied on Volume",     type=input.integer, group = 'VSA')
+ratioUltraVolume =      input(defval=2.2,   title="Ultra High Volume Ratio",            type=input.float, group = 'VSA')
+ratioVeryHighVolume =   input(defval=1.8,   title="Very High Volume Ratio",             type=input.float, group = 'VSA')
+ratioHighVolume =       input(defval=1.2,   title="High Volume Ratio",                  type=input.float, group = 'VSA')
+ratioNormalVolume =     input(defval=0.8,   title="Normal Volume Ratio",                type=input.float, group = 'VSA')
+ratioLowVolume =        input(defval=0.4,   title="Low Volume Ratio",                   type=input.float, group = 'VSA')
+ratioVeryLowVolume =    input(defval=0.4,   title="Very Low Volume Ratio",              type=input.float, group = 'VSA')
+
+findSizeVol() =>
+	highestVolume = 0.
+	size = 0.
+	for i = 0 to 499
+		// Lấy giá trị volume của từng nến
+		volumeValue = volume[i]
+		
+		// So sánh và cập nhật giá trị lớn nhất
+		if volumeValue > highestVolume
+			highestVolume := volumeValue		
+	
+	size := sizeVSA!=0?highestVolume/sizeVSA:1
+	size
+
+// WILDERS MA
+float volumeMA  = 0
+volumeMA := nz(volumeMA[1]) + (volume-nz(volumeMA[1])) / lengthVolumeMA
+
+
+ultraHighVolumeMin   = volumeMA * ratioUltraVolume
+veryHighVolumeMin    = volumeMA * ratioVeryHighVolume
+highVolumeMin        = volumeMA * ratioHighVolume
+normalVolumeMin      = volumeMA * ratioNormalVolume
+lowVolumeMin         = volumeMA * ratioLowVolume
+veryLowVolumeMin     = volumeMA * ratioVeryLowVolume
+
+
+volUltraHigh        = volume >= ultraHighVolumeMin                                      ? true : false
+volVeryHigh         = volume >= veryHighVolumeMin   and volume < ultraHighVolumeMin     ? true : false
+volHigh             = volume >= highVolumeMin       and volume < veryHighVolumeMin      ? true : false
+volNormal           = volume >= normalVolumeMin     and volume < highVolumeMin          ? true : false
+volLow              = volume >= lowVolumeMin        and volume < normalVolumeMin        ? true : false
+volVeryLow          = volume < lowVolumeMin                                             ? true : false
+
+
+
+
+palette = volUltraHigh ? #ad0000 : volVeryHigh ? #ffffff : volHigh ? #3d3d3d : volNormal ? #787b8680: volLow ? #787b8680 : #787b8680
+highVol = volUltraHigh ? true : volVeryHigh ? true : volHigh ? true : false
+// plot(highVol?close:na, color=palette)
+	
+plot(ShowVSA?volume/findSizeVol():na, color = palette, style=plot.style_columns, title="Volume", transp=0)
+plot(showMA and ShowVSA ? volumeMA/findSizeVol() : na, style=plot.style_line, color=#ffffff, title="Volume MA")
+// VSA END
+
+// Market Cipher B
+// Get user input
+//version       = input.string("2024", "Version")
+showGreenWave = input(false, 'MONEY FLOW', group = 'ON/OFF',tooltip = 'Khung thời gian sử dụng <= H1\nH1(wr: 78%(48/61))\nM15(wr: 81%(81/100)')
+sizeGW = input(1.5,'gw size',group = 'Marker Cipher(Green Wave)',step = 0.5)
+sma_source = input(title = "Oscillator MA Type",  defval = "EMA", options = ["SMA", "EMA"],group = 'Marker Cipher(Green Wave)')
+histogram_source = input(title = "Histogram MA Type",  defval = "EMA", options = ["SMA", "EMA"],group = 'Marker Cipher(Green Wave)')
+MCfast = input(9,'signal',group = 'Marker Cipher(Green Wave)')
+MCslow = input(6,'green wave',group = 'Marker Cipher(Green Wave)')
+obLevel1      = input(60, "Over Bought Level 1",group = 'Market Cipher B')
+osLevel1      = input(-60, "Over Sold Level 1",group = 'Market Cipher B')
+multGW = input(40,'Mult Green wave line',group = 'Marker Cipher(Green Wave)')
+multGW_fast = input(60,'Mult Green wave histogram',group = 'Marker Cipher(Green Wave)')
+PeroidGW = input(200,'Peroid length Green wave',group = 'Marker Cipher(Green Wave)')
+// Functions
+tb = input(3,'bw2 length',group = 'Market Cipher B')
+blueWaves_vwap(src, chlLen, avgLen) =>
+    esa = ema(src, chlLen)
+    d = ema(abs(src - esa), chlLen)
+    ci = (src - esa) / (0.015 * d)
+    bw1 = ema(ci, avgLen)
+    bw2 = sma(bw1, tb)
+    vwap = bw1 - bw2
+    [bw1, bw2, vwap]
+moneyFlowFunc(period, mult, y) => sma(((close - open) / (high - low)) * mult, period) - y
+fast = input(9,'fast',group = 'Market Cipher B')
+slow = input(12,'slow',group = 'Market Cipher B')
+
+// Get components 
+cond(_offset) =>
+    [bw1, bw2, vwap] = blueWaves_vwap(hlc3, fast, slow)
+    moneyFlow = moneyFlowFunc(multGW, PeroidGW, 2.25)*sizeGW
+    rsiMod    = sma(stoch(close, high, low, 40), 2)
+    stcRsiMod = sma(stoch(close, high, low, 81), 2)
+    [bw1[_offset], bw2[_offset], vwap[_offset], moneyFlow[_offset], rsiMod[_offset], stcRsiMod[_offset]]
+tf = timeframe.period
+[bw1, bw2, vwap, moneyFlow, rsiMod, stcRsiMod] = security(syminfo.tickerid, tf, cond(1))
+///green wave start
+moneyFlowFast = moneyFlowFunc(multGW_fast, PeroidGW, 2.25)/2.5*sizeGW
+
+moneyFlowSMA = sma_source == "SMA" ? sma(moneyFlow,MCslow)  : ema(moneyFlow,MCslow) 
+signal = sma_source == "SMA" ? sma(moneyFlowSMA,MCfast): ema(moneyFlowSMA,MCfast) 
+moneyFlowFastSMA = histogram_source == "SMA" ? sma(moneyFlowFast,2)  : ema(moneyFlowFast,2) 
+///green wave start
+plot(showGreenWave?moneyFlowFastSMA:na, "Money Flow Slow", color = (moneyFlowFastSMA >= 0 ? #0c329980: #80192280),style = plot.style_area,linewidth = 1)
+colorML = #787b86
+moneyFlowSMA1=plot(showGreenWave ? moneyFlowSMA: na, title = 'Money Flow Line 1',color=moneyFlowSMA>signal? #ffe636: #ffe636,style = plot.style_line,linewidth = 1)
+plot(showGreenWave? signal:na,color = #b2b5be6e )
+lin40=hline(showGreenWave?40:na, color=#363a3b00, linewidth=1, linestyle=hline.style_solid)
+lineam40=hline(showGreenWave?-40:na, color=#363a3b00, linewidth=1, linestyle=hline.style_solid)
+lin50=hline(showGreenWave?50:na, color=#363a3b73, linewidth=1, linestyle=hline.style_solid)
+lineam50=hline(showGreenWave?-50:na, color=#363a3b73, linewidth=1, linestyle=hline.style_solid)
+fill(lin40,lin50,color.new(#999999, 70))
+fill(lineam40,lineam50,color.new(#999999, 70))
+/// Market cipher B end
+
+///TDI start
+showTDI = input(true, 'TDI ON/OFF', group = 'ON/OFF',inline = 'overlayLine1')
+
+rsiPeriod = input(14, minval = 1, title = "RSI Period",group = '---------- TDI  ----------')
+bandLength = input(34, minval = 1, title = "Band Length",group = '---------- TDI ----------')
+lengthrsipl = input(7, minval = 0, title = "Fast MA on RSI",group = '---------- TDI ----------')
+lengthtradesl = input(2, minval = 1, title = "Slow MA on RSI",group = '---------- TDI ----------')
+BBstdv =input(1.6185, minval = 1, title = "STDV BB",group = '---------- TDI ----------')
+shark = input(true,'Show sharkfin',group = '---------- TDI ----------')
+src1 = close                                                             // Source of Calculations (Close of Bar)
+r = rsi(src1, rsiPeriod)                                                 // RSI of Close
+ma = sma(r, bandLength)                                                 // Moving Average of RSI [current]
+offs = (BBstdv * stdev(r, bandLength))                                  // Offset
+up = ma + offs                                                          // Upper Bands
+dn = ma - offs                                                          // Lower Bands
+offs1 = (2 * stdev(r, bandLength))
+up1 = ma+offs1
+dn1 = ma-offs1
+mid = (up + dn) / 2                                                     // Average of Upper and Lower Bands
+mbb = sma(r, lengthrsipl)                                            // Moving Average of RSI 2 bars back
+mab = sma(r, lengthtradesl)                                          // Moving Average of RSI 7 bars back
+line20=hline(showTDI?20:na, color=color.rgb(54,58,59,55), linewidth=1, linestyle=hline.style_solid)
+line32=hline(showTDI?32:na, color=color.rgb(54,58,59,55), linewidth=1, linestyle=hline.style_solid)
+line50=hline(showTDI?50:na, color=color.rgb(54,58,59,55), linewidth=1, linestyle=hline.style_solid)
+line68=hline(showTDI?68:na, color=color.rgb(54,58,59,55), linewidth=1, linestyle=hline.style_solid)
+line80=hline(showTDI?80:na, color=color.rgb(54,58,59,55), linewidth=1, linestyle=hline.style_solid)
+//fill(line20,line32,color.new(#999999, 80))
+//fill(line80,line68,color.new(#999999, 80))
+// Plot the TDI
+upl=plot(showTDI?up:na, color=#ffffff, transp=80, title="VB Channel High 1,618",linewidth=1)
+dnl=plot(showTDI?dn:na, color=#ffffff, transp=80, title="VB Channel Low 1,618",linewidth=1)
+up1l=plot(showTDI?up1:na, color=#ffffff, transp=36, title="VB Channel High 2",linewidth=1)
+dn1l=plot(showTDI?dn1:na, color=#ffffff, transp=36, title="VB Channel Low 2",linewidth=1)
+midl=plot(showTDI?mid:na, color=#ffffff, transp=60, linewidth=1, title="MBL")
+mbbl=plot(showTDI?mbb:na, color=#b2b5be, linewidth=1, title="TSL Signal")
+mabl=plot(showTDI?mab:na, color=#ffffff, linewidth=2, title="RSI PL")
+//long/short labels
+
+long1= crossover(mab, mbb) and mbb > mid and mbb > 50
+short1= crossunder(mab, mbb) and mbb < mid and mbb < 50
+best_setup = crossover(mab, mid) 
+alertcondition(best_setup, title="RSI Crosses Yellow", message="rsi crosses mid")
+alertcondition(crossover(mab,mbb), title="RSI Crosses TSL Signal", message="rsi crosses TSL Signal")
+
+sharkfin_setup_Buy = crossover(mab, up) and mab <= up
+sharkfin_setup_Sell = crossover(mab, dn) and mab >= dn
+
+alertcondition(sharkfin_setup_Buy or sharkfin_setup_Sell, title="sharkfin_setup", message="sharkfin_setup") 
+
+scalp= mab > mid 
+bgcolor(scalp ? color.rgb(0, 230, 119, 100) : na, transp=95, title = "Backgroud uptrend")
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// CCI EMA Start
+length1 = input(20, minval=1, title="CCI", group = '---------- CCI  ----------')
+ma_length = input(13, minval=1, title="EMA", group = '---------- CCI  ----------')
+src_cci = input(close, title="Source", group = '---------- CCI  ----------')
+ma1 = sma(src_cci, length1)
+cci1 = (src_cci - ma1) / (0.015 * dev(src_cci, length1))
+cciShow = cci1> 200? 220: cci1<-200? -220: cci1
+cci_ema = ema(cci1, ma_length)
+// fill(band1, band3, color=color.blue, transp=95)
+checkOverSell(type) =>
+	rs = false
+	for i = 0 to 10 
+		/// type = 1 -> oversell
+		if cci1[i] <= -150 and type == 1
+			rs := true
+		/// type = 0 -> over buy
+		if cci1[i] >= 150 and type == 0
+			rs := true
+	rs
+ShowSignal = input(true, 'Signals buy sell', group = 'ON/OFF')
+plotshape(crossover(cci1, cci_ema) and checkOverSell(1) and cci_ema < -50 and (bw1 < osLevel1+10 or bw1[1] < osLevel1+10) and ShowSignal, "Buy", shape.triangleup, location.bottom, color.blue,size=size.tiny)
+plotshape(crossunder(cci1, cci_ema) and checkOverSell(0) and cci_ema > 50 and bw1 > obLevel1-10  and ShowSignal, "Sell", shape.triangledown, location.top,color.red,size=size.tiny)
+plotshape(crossover(mab,dn) and ShowSignal, "sharkfin",shape.circle,location.bottom,color = #00ccff)
+plotshape(crossunder(mab,up) and ShowSignal, "sharkfin",shape.circle,location.top,color = #ff0000)
+
+
+CCI=(crossover(cci1, cci_ema) and checkOverSell(1) and cci_ema < -50 and (bw1 < osLevel1+10 or bw1[1] < osLevel1+10)) or(crossunder(cci1, cci_ema) and checkOverSell(0) and cci_ema > 50 and bw1 > obLevel1-10)
+SF =(crossover(mab,dn) or crossunder(mab,up))
+////
+//ccibuy =crossover(cci1, cci_ema) and checkOverSell(1) and cci_ema < -50 and (bw1 < osLevel1+10 or bw1[1] < osLevel1+10)
+//ccisell = crossunder(cci1, cci_ema) and checkOverSell(0) and cci_ema > 50 and bw1 > obLevel1-10
+//SFbuy = (crossover(mab,dn))
+//SFsell = crossunder(mab,up)
+
+//tinhieukepbuy = (ccibuy and SFbuy)or(ccibuy and ccibuy[1]==SFbuy)or(SFbuy and SFbuy[1]==ccibuy)
+//tinhieukepsell= (ccisell and SFsell)or(ccisell and ccisell[1]==SFsell)or(SFsell and SFsell[1]==ccisell)
+//plotshape(tinhieukepbuy, "BAI",shape.diamond, location.bottom, #003cff,size=size.tiny)
+
+
+
+
+
+//////////////////////////////////
+Triggerarlert(_ticker)=>
+    CCI1=security(_ticker,timeframe.period,CCI)
+    SF1=security(_ticker,timeframe.period,SF)
+    if CCI1
+        alert('🦅  '+ _ticker+"  Hưng đẹp zai vào canh CCI")
+    if SF1
+        alert('🦈  '+ _ticker+"  Vào câu cá mập nào")
+Triggerarlert("MEXC:BTCUSDT")
+Triggerarlert("MEXC:ETHUSDT")
+Triggerarlert("MEXC:BNBUSDT")
+Triggerarlert("MEXC:SOLUSDT")
+Triggerarlert("MEXC:NOTUSDT")
+Triggerarlert("MEXC:FLOKIUSDT")
+Triggerarlert("MEXC:HIGHUSDT")
+Triggerarlert("MEXC:LINKUSDT")
+Triggerarlert("MEXC:TURBOUSDT")
+Triggerarlert("MEXC:TRBUSDT.P")
+Triggerarlert("MEXC:ARBUSDT")
+Triggerarlert("MEXC:PEOPLEUSDT")
+Triggerarlert("MEXC:KEYUSDT.P")
+Triggerarlert("MEXC:BBUSDT.P")
+Triggerarlert("MEXC:KEYUSDT.P")

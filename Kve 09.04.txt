@@ -1,0 +1,1498 @@
+//@version=5
+//indicator('9/4', shorttitle='9/4', overlay=true, format=format.inherit)
+
+strategy(title="Kve_09/04", overlay=true, format=format.inherit,max_lines_count  = 500, max_labels_count = 500, max_boxes_count  = 500, max_bars_back = 500)
+
+
+////////////ShowSmartTrail ADD START
+ShowSmartTrail = input.bool(false, 'Smart Trail Now TF', group = 'ON/OFF', inline = 'overlayLine3')
+ShowSmartTrailTF1 = input.bool(false, 'SMT TF 1', group = 'ON/OFF', inline = 'overlayLine3')
+ShowSmartTrailTF2 = input.bool(true, 'SMT TF 2', group = 'ON/OFF', inline = 'overlayLine3')
+
+
+Show3ema = input.bool(false, 'Sonic R ON/OFF      ', inline = 'overlayLine1', group = 'K2024')
+Showband = input.bool(true, 'Band ATR ON/OFF      ', inline = 'overlayLine1', group = 'K2024')
+Showtime = input.bool(false, 'Timing ON/OFF      ', inline = 'overlayLine1', group = 'K2024')
+Showlondon = input.bool(false, 'London ON/OFF      ', inline = 'overlayLine1', group = 'K2024')
+
+
+
+///////////////////// EMA /////////////////////////////
+
+//---------------Inputs----------------------------------------------------------------------------------------------------------//
+EMA = input(defval=89, title='EMA Signal')
+HiLoLen = input.int(34, minval=2, title='High Low channel Length')
+pacC = ta.ema(close, HiLoLen)
+pacL = ta.ema(low, HiLoLen)
+pacH = ta.ema(high, HiLoLen)
+DODGERBLUE = color.rgb(2, 6, 240)
+// Plot the Price Action Channel (PAC) base on EMA high,low and close
+La = plot(Show3ema?pacL:na, color=DODGERBLUE, linewidth=1, title='High PAC EMA', transp=50,editable = false)
+Ha = plot(Show3ema?pacH:na, color=DODGERBLUE, linewidth=1, title='Low PAC EMA', transp=50,editable = false)
+Ca = plot(Show3ema?pacC:na,  style=plot.style_circles,color = color.red, title='Close PAC EMA', transp=0,editable = false)
+fill(La, Ha, color=color.new(#00bbd4, 100), title='Fill HiLo PAC',editable = false)
+//Moving Average
+signalMA = ta.ema(close, EMA)
+ema610 = ta.ema(close, 610)
+ema200 = ta.ema(close, 200)
+plot(Show3ema?ema610:na, title='EMA 610', color=color.new(#000000, 0), linewidth=3, style=plot.style_line,display = display.none)
+plot(Show3ema?ema200:na, title='EMA 200', color=color.new(color.fuchsia, 0), linewidth=2, style=plot.style_line,display = display.none)
+plot(Show3ema?signalMA:na, title='EMA Signal', color=color.new(color.orange, 0), linewidth=3, style=plot.style_line)
+
+
+
+///////////////////// SMART TRAIL /////////////////
+
+
+trailType = input.string('modified', 'Trailtype', options=['modified', 'unmodified'], group = "👉 SmartTrail Settings")
+ATRPeriod = input(200, 'ATR Period', group = "👉 SmartTrail Settings")
+ATRFactor_default = input.float(6.5, 'ATR Factor mặc định', group = "👉 SmartTrail Settings" ,tooltip = "Các TF ngoài các khung bên dưới sẽ sử dụng thông số mặc định",minval = 2, maxval = 10, step = 0.5)
+
+ATRFactor_ON_OF = input.bool(true,"Thiet lap gia tri theo tung TF", group = "👉 SmartTrail Settings")
+ATRFactor_M5 = input.float(5.2, 'ATR Factor M5', group = "👉 SmartTrail Settings" ,tooltip = "Thông số mặc định phù hợp đánh vàng",minval = 2, maxval = 10, step = 0.5)
+ATRFactor_M15 = input.float(5.8, 'ATR Factor M15', group = "👉 SmartTrail Settings" ,tooltip = "Thông số mặc định phù hợp đánh vàng",minval = 2, maxval = 10, step = 0.5)
+ATRFactor_M30 = input.float(6.5, 'ATR Factor M30', group = "👉 SmartTrail Settings" ,tooltip = "Thông số mặc định phù hợp đánh vàng",minval = 2, maxval = 10, step = 0.5)
+ATRFactor_H1 = input.float(6.7, 'ATR Factor H1', group = "👉 SmartTrail Settings" ,tooltip = "Thông số mặc định phù hợp đánh vàng",minval = 2, maxval = 10, step = 0.5)
+ATRFactor_H4 = input.float(7, 'ATR Factor H4', group = "👉 SmartTrail Settings" ,tooltip = "Thông số mặc định phù hợp đánh vàng",minval = 2, maxval = 10, step = 0.5)
+ATRFactor_D1 = input.float(7, 'ATR Factor D1', group = "👉 SmartTrail Settings" ,tooltip = "Thông số mặc định phù hợp đánh vàng",minval = 2, maxval = 10, step = 0.5)
+smtColorfib1_up  = color.rgb(0, 13, 255)
+smtColorfib1_down  = color.rgb(255, 0, 0)
+smtColorfib2  = color.new(#8a8a81, 49)
+smtColorfib3  = color.new(#8a8a81, 49)
+
+
+fib1Level = 61.8
+fib2Level = 78.6
+fib3Level = 88.6
+
+//box_width = input.float(7, title = 'Supply/Demand Box Width', group = "👉 SUPPLY AND DEMAND", minval = 1, maxval = 10, step = 0.5)
+Smoothing = input(3, 'Smoothing', group = "👉 SmartTrail Settings")
+
+/// set value ATRFactor when TimeFrame change
+getATRFactor(TF) => 
+    ATRFactor = if TF == "5" and ATRFactor_ON_OF
+        ATRFactor_M5
+    else if TF == "15"and ATRFactor_ON_OF
+        ATRFactor_M15
+    else if TF == "30"and ATRFactor_ON_OF
+        ATRFactor_M30    
+    else if TF == "60" and ATRFactor_ON_OF
+        ATRFactor_H1
+    else if TF == "240"and ATRFactor_ON_OF
+        ATRFactor_H4
+    else if TF == "1440"and ATRFactor_ON_OF
+        ATRFactor_D1    
+    else 
+        ATRFactor_default
+    ATRFactor
+
+// drawWithLabel(price) => 
+//     // Khai báo biến cho nhãn
+//     var label_id = label.new(na, na, text="", color=color.rgb(33, 149, 243, 100), style=label.style_label_left, yloc=yloc.price)
+//     // Xóa nhãn nếu không phải là cây nến cuối cùng
+//     if not barstate.islast
+//         label.delete(label_id)
+//     // Tính chỉ số của cây nến cuối cùng
+//     last_candle_index = bar_index - ta.barssince(ta.change(time)) + 1
+//     // Đặt nhãn mới cho đường EMA tại cây nến cuối cùng
+//     if barstate.islast
+//         label_id := label.new(last_candle_index, price, text="EMA(" + str.tostring(price) + ")", color=color.blue, style=label.style_label_left, yloc=yloc.price)
+
+// Function
+Wild_ma(_src, _malength) =>
+    _wild = 0.0
+    _wild := nz(_wild[1]) + (_src - nz(_wild[1])) / _malength
+    _wild
+    
+CalculateSMT_MultiTF(TF, ATRFactorInput) =>
+    norm_o = request.security(ticker.new(syminfo.prefix, syminfo.ticker), TF, open)
+    norm_h = request.security(ticker.new(syminfo.prefix, syminfo.ticker), TF, high)
+    norm_l = request.security(ticker.new(syminfo.prefix, syminfo.ticker), TF, low)
+    norm_c = request.security(ticker.new(syminfo.prefix, syminfo.ticker), TF, close)
+    ATRFactor = ATRFactorInput
+
+    /////////// TRUE RANGE CALCULATIONS /////////////////
+    HiLo = math.min(norm_h - norm_l, 1.5 * nz(ta.sma(norm_h - norm_l, ATRPeriod)))
+    HRef = norm_l <= norm_h[1] ? norm_h - norm_c[1] : norm_h - norm_c[1] - 0.5 * (norm_l - norm_h[1])
+    LRef = norm_h >= norm_l[1] ? norm_c[1] - norm_l : norm_c[1] - norm_l - 0.5 * (norm_l[1] - norm_h)
+    trueRange = trailType == 'modified' ? math.max(HiLo, HRef, LRef) : math.max(norm_h - norm_l, math.abs(norm_h - norm_c[1]), math.abs(norm_l - norm_c[1]))
+
+
+/////////// TRADE LOGIC ////////////////////////
+
+    loss =  ATRFactor* Wild_ma(trueRange, ATRPeriod)
+    
+    Up68 = norm_c - loss
+    Dn68 = norm_c + loss
+
+    TrendUp = Up68
+
+    TrendDown = Dn68
+
+    Trendtrade = 1
+    TrendUp := norm_c[1] > TrendUp[1] ? math.max(Up68, TrendUp[1]) : Up68 
+
+    TrendDown := norm_c[1] < TrendDown[1] ? math.min(Dn68, TrendDown[1]) : Dn68
+
+
+    Trendtrade := norm_c > TrendDown[1] ? 1 : norm_c < TrendUp[1] ? -1 : nz(Trendtrade[1], 1)
+    trail = Trendtrade == 1 ? TrendUp : TrendDown
+        
+    ex = 0.0
+    ex := ta.crossover(Trendtrade, 0) ? norm_h : ta.crossunder(Trendtrade, 0) ? norm_l : Trendtrade == 1 ? math.max(ex[1], norm_h) : Trendtrade == -1 ? math.min(ex[1], norm_l) : ex[1]
+    [ex,trail,Trendtrade]
+
+// calculate and plot
+nowTF = str.tostring(timeframe.period)
+[ex,trail,Trendtrade] = request.security(ticker.new(syminfo.prefix, syminfo.ticker), nowTF, CalculateSMT_MultiTF(nowTF,getATRFactor(nowTF)) ) 
+
+// plot SMT now TF
+
+f2 = ex + (trail - ex) * fib2Level / 100
+f3 = ex + (trail - ex) * fib3Level / 100
+Fib1 = plot(ShowSmartTrail ?(ta.sma(trail, Smoothing)):na, 'S/R - SIGNAL', style=plot.style_line, color=Trendtrade == 1 ? smtColorfib1_up : Trendtrade == -1 ? smtColorfib1_down : na,linewidth = 1,editable = false)
+Fib2 = plot(ShowSmartTrail ?(ta.sma(f2, Smoothing)) :na, 'Ranger B', color=smtColorfib2,display = display.none,editable=false) 
+Fib3 = plot(ShowSmartTrail ?(ta.sma(f3, Smoothing)) :na, 'Ranger C',color=smtColorfib3,editable=false)
+fill(Fib1, Fib3, color = trail > f3 ?  color.new(#ff1100, 85): color.new(#2157f9, 85),editable=false)
+fill(Fib3, Fib2, color = trail > f3 ?  color.new(#ff1100, 90): color.new(#2157f9, 90),editable=false)
+
+
+
+
+
+
+////////////////////plot SMT HTF 1/////////////////////////////////
+
+multiTF1 = input.timeframe('15','multi timeframe 1:', group="👉 SmartTrail Settings")
+[exHTF,trailHTF,TrendtradeHTF] = request.security(ticker.new(syminfo.prefix, syminfo.ticker), multiTF1, CalculateSMT_MultiTF(multiTF1,getATRFactor(multiTF1)))
+f2HTF = exHTF + (trailHTF - exHTF) * fib2Level / 100
+f3HTF = exHTF + (trailHTF - exHTF) * fib3Level / 100
+Fib1HTF = plot(ShowSmartTrailTF1 ?(ta.sma(trailHTF, Smoothing)) :na, 'S/R - SIGNAL', style=plot.style_line, color=TrendtradeHTF == 1 ? smtColorfib1_up : TrendtradeHTF == -1 ? smtColorfib1_down : na,linewidth = 1,editable = false)
+Fib2HTF = plot(ShowSmartTrailTF1 ?(ta.sma(f2HTF, Smoothing)):na, 'Ranger B', color=smtColorfib2,editable=false) 
+Fib3HTF = plot(ShowSmartTrailTF1 ?(ta.sma(f3HTF, Smoothing)):na, 'Ranger C',color=smtColorfib3,editable=false)
+fill(Fib1HTF, Fib3HTF, color = trailHTF > f3HTF ?  color.new(#ff1100, 85): color.new(#2157f9, 85),title = 'Backgroud TF 1',editable=false)
+fill(Fib3HTF, Fib2HTF, color = trailHTF > f3HTF ?  color.new(#ff1100, 85): color.new(#2157f9, 85),title = 'Backgroud TF 1',editable=false)
+
+
+
+//plot SMT HTF 2
+
+
+multiTF2 = input.timeframe('30','multi timeframe 2:', group="👉 SmartTrail Settings")
+[exHTF2,trailHTF2,TrendtradeHTF2] = request.security(ticker.new(syminfo.prefix, syminfo.ticker), multiTF2, CalculateSMT_MultiTF(multiTF2,getATRFactor(multiTF2)) ) 
+f2HTF2 = exHTF2 + (trailHTF2 - exHTF2) * fib2Level / 100
+f3HTF2 = exHTF2 + (trailHTF2 - exHTF2) * fib3Level / 100
+Fib1HTF2 = plot(ShowSmartTrailTF2 ?(ta.sma(trailHTF2, Smoothing)):na, 'S/R - SIGNAL', style=plot.style_line, color=TrendtradeHTF2 == 1 ? smtColorfib1_up : TrendtradeHTF2 == -1 ? smtColorfib1_down : na,linewidth = 1,editable = false)
+Fib2HTF2 = plot(ShowSmartTrailTF2 ?(ta.sma(f2HTF2, Smoothing)):na, 'Ranger B', color=smtColorfib2,editable=false) 
+Fib3HTF2 = plot(ShowSmartTrailTF2 ?(ta.sma(f3HTF2, Smoothing)):na, 'Ranger C',color=smtColorfib3,editable=false)
+fill(Fib1HTF2, Fib3HTF2, color = trailHTF2 > f3HTF2 ?  color.new(#ff1100, 90): color.new(#2157f9, 90),title = 'Backgroud TF 2',editable=false)
+fill(Fib3HTF2, Fib2HTF2, color = trailHTF2 > f3HTF2 ? color.new(#ff1100, 90): color.new(#2157f9, 90),title = 'Backgroud TF 2',editable=false)
+/////////////////////////////
+smartTrailTiming = ((high[0] >= trail) and (low[0] <= trail)) or ((high[0] >= f3) and (low[0] <= f3)) or ((high[0] >= f2) and (low[0] <= f2)) 
+alertcondition(smartTrailTiming, title="Smart trail timing", message="Smart trail timing")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import TradingView/ta/5
+//************************************************************************************************************
+// Parameter
+//************************************************************************************************************
+
+indiSet = input(false, '═════════ MRC Parameter ════════')
+source = input(hlc3, title='Price Source')
+type = input.string('SuperSmoother', title='Filter Type', options=['SuperSmoother', 'Ehlers EMA', 'Gaussian', 'Butterworth', 'BandStop', 'SMA', 'EMA', 'RMA'])
+length = input.int(200, title='Lookback Period', minval=1)
+innermult = input.float(1.0, title='Inner Channel Size Multiplier', minval=0.1)
+outermult = input.float(2.415, title='Outer Channel Size Multiplier', minval=0.1)
+
+ChartSet = input(false, '═════════ Chart Setting ════════')
+drawchannel = input(true, title='Draw Channel')
+displayzone = input(true, title='Draw Zone (With Channel)')
+zonetransp = input.int(60, title='Zone Transparency', minval=0, maxval=100)
+displayline = input(true, title='Display Line Extension')
+
+MTFSet = input(false, '═════════ MTF Setting ════════')
+enable_mtf = input(true, title='Enable Multiple TimeFrame Analysis')
+mtf_disp_typ = input.string('On Hover', title='MTF Display Type', options=['Always Display', 'On Hover'])
+mtf_typ = input.string('Auto', title='Multiple TimeFrame Type', options=['Auto', 'Custom'])
+mtf_lvl1 = input.timeframe('D', title='Custom MTF Level 1')
+mtf_lvl2 = input.timeframe('W', title='Custom MTF Level 2')
+
+//************************************************************************************************************
+// Functions Start {
+//************************************************************************************************************
+var pi = 2 * math.asin(1)
+var mult = pi * innermult
+var mult2 = pi * outermult
+var gradsize = 0.5
+var gradtransp = zonetransp
+
+//-----------------------
+// Ehler SwissArmyKnife Function
+//-----------------------
+SAK_smoothing(_type, _src, _length) =>
+    c0 = 1.0
+    c1 = 0.0
+    b0 = 1.0
+    b1 = 0.0
+    b2 = 0.0
+    a1 = 0.0
+    a2 = 0.0
+    alpha = 0.0
+    beta = 0.0
+    gamma = 0.0
+    cycle = 2 * pi / _length
+
+    if _type == 'Ehlers EMA'
+        alpha := (math.cos(cycle) + math.sin(cycle) - 1) / math.cos(cycle)
+        b0 := alpha
+        a1 := 1 - alpha
+        a1
+    if _type == 'Gaussian'
+        beta := 2.415 * (1 - math.cos(cycle))
+        alpha := -beta + math.sqrt(beta * beta + 2 * beta)
+        c0 := alpha * alpha
+        a1 := 2 * (1 - alpha)
+        a2 := -(1 - alpha) * (1 - alpha)
+        a2
+    if _type == 'Butterworth'
+        beta := 2.415 * (1 - math.cos(cycle))
+        alpha := -beta + math.sqrt(beta * beta + 2 * beta)
+        c0 := alpha * alpha / 4
+        b1 := 2
+        b2 := 1
+        a1 := 2 * (1 - alpha)
+        a2 := -(1 - alpha) * (1 - alpha)
+        a2
+    if _type == 'BandStop'
+        beta := math.cos(cycle)
+        gamma := 1 / math.cos(cycle * 2 * 0.1)  // delta default to 0.1. Acceptable delta -- 0.05<d<0.5
+        alpha := gamma - math.sqrt(gamma * gamma - 1)
+        c0 := (1 + alpha) / 2
+        b1 := -2 * beta
+        b2 := 1
+        a1 := beta * (1 + alpha)
+        a2 := -alpha
+        a2
+    if _type == 'SMA'
+        c1 := 1 / _length
+        b0 := 1 / _length
+        a1 := 1
+        a1
+    if _type == 'EMA'
+        alpha := 2 / (_length + 1)
+        b0 := alpha
+        a1 := 1 - alpha
+        a1
+    if _type == 'RMA'
+        alpha := 1 / _length
+        b0 := alpha
+        a1 := 1 - alpha
+        a1
+
+    _Input = _src
+    _Output = 0.0
+    _Output := c0 * (b0 * _Input + b1 * nz(_Input[1]) + b2 * nz(_Input[2])) + a1 * nz(_Output[1]) + a2 * nz(_Output[2]) - c1 * nz(_Input[_length])
+    _Output
+
+//-----------------------
+// SuperSmoother Function
+//-----------------------
+supersmoother(_src, _length) =>
+    s_a1 = math.exp(-math.sqrt(2) * pi / _length)
+    s_b1 = 2 * s_a1 * math.cos(math.sqrt(2) * pi / _length)
+    s_c3 = -math.pow(s_a1, 2)
+    s_c2 = s_b1
+    s_c1 = 1 - s_c2 - s_c3
+    ss = 0.0
+    ss := s_c1 * _src + s_c2 * nz(ss[1], _src[1]) + s_c3 * nz(ss[2], _src[2])
+    ss
+
+//-----------------------
+// Auto TimeFrame Function
+//-----------------------
+// ————— Converts current chart resolution into a float minutes value.
+f_resInMinutes() =>
+    _resInMinutes = timeframe.multiplier * (timeframe.isseconds ? 1. / 60 : timeframe.isminutes ? 1. : timeframe.isdaily ? 60. * 24 : timeframe.isweekly ? 60. * 24 * 7 : timeframe.ismonthly ? 60. * 24 * 30.4375 : na)
+    _resInMinutes
+
+get_tf(_lvl) =>
+    y = f_resInMinutes()
+    z = timeframe.period
+    if mtf_typ == 'Auto'
+        if y < 1
+            z := _lvl == 1 ? '1' : _lvl == 2 ? '5' : z
+            z
+        else if y <= 3
+            z := _lvl == 1 ? '5' : _lvl == 2 ? '15' : z
+            z
+        else if y <= 10
+            z := _lvl == 1 ? '15' : _lvl == 2 ? '60' : z
+            z
+        else if y <= 30
+            z := _lvl == 1 ? '60' : _lvl == 2 ? '240' : z
+            z
+        else if y <= 120
+            z := _lvl == 1 ? '240' : _lvl == 2 ? 'D' : z
+            z
+        else if y <= 240
+            z := _lvl == 1 ? 'D' : _lvl == 2 ? 'W' : z
+            z
+        else if y <= 1440
+            z := _lvl == 1 ? 'W' : _lvl == 2 ? 'M' : z
+            z
+        else if y <= 10080
+            z := _lvl == 1 ? 'M' : z
+            z
+        else
+            z := z
+            z
+    else
+        z := _lvl == 1 ? mtf_lvl1 : _lvl == 2 ? mtf_lvl2 : z
+        z
+
+    z
+
+//-----------------------
+// Mean Reversion Channel Function
+//-----------------------
+get_mrc() =>
+    v_condition = 0
+    v_meanline = source
+    v_meanrange = supersmoother(ta.tr, length)
+
+    //-- Get Line value
+    if type == 'SuperSmoother'
+        v_meanline := supersmoother(source, length)
+        v_meanline
+
+    if type != 'SuperSmoother'
+        v_meanline := SAK_smoothing(type, source, length)
+        v_meanline
+
+    v_upband1 = v_meanline + v_meanrange * mult
+    v_loband1 = v_meanline - v_meanrange * mult
+    v_upband2 = v_meanline + v_meanrange * mult2
+    v_loband2 = v_meanline - v_meanrange * mult2
+
+    //-- Check Condition
+    if close > v_meanline
+        v_upband2_1 = v_upband2 + v_meanrange * gradsize * 4
+        v_upband2_9 = v_upband2 + v_meanrange * gradsize * -4
+        if high >= v_upband2_9 and high < v_upband2
+            v_condition := 1
+            v_condition
+        else if high >= v_upband2 and high < v_upband2_1
+            v_condition := 2
+            v_condition
+        else if high >= v_upband2_1
+            v_condition := 3
+            v_condition
+        else if close <= v_meanline + v_meanrange
+            v_condition := 4
+            v_condition
+        else
+            v_condition := 5
+            v_condition
+
+    if close < v_meanline
+        v_loband2_1 = v_loband2 - v_meanrange * gradsize * 4
+        v_loband2_9 = v_loband2 - v_meanrange * gradsize * -4
+        if low <= v_loband2_9 and low > v_loband2
+            v_condition := -1
+            v_condition
+        else if low <= v_loband2 and low > v_loband2_1
+            v_condition := -2
+            v_condition
+        else if low <= v_loband2_1
+            v_condition := -3
+            v_condition
+        else if close >= v_meanline + v_meanrange
+            v_condition := -4
+            v_condition
+        else
+            v_condition := -5
+            v_condition
+
+    [v_meanline, v_meanrange, v_upband1, v_loband1, v_upband2, v_loband2, v_condition]
+
+//-----------------------
+// MTF Analysis
+//-----------------------
+
+get_stat(_cond) =>
+    ret = 'Price at Mean Line\n'
+    if _cond == 1
+        ret := 'Overbought (Weak)\n'
+        ret
+    else if _cond == 2
+        ret := 'Overbought\n'
+        ret
+    else if _cond == 3
+        ret := 'Overbought (Strong)\n'
+        ret
+    else if _cond == 4
+        ret := 'Price Near Mean\n'
+        ret
+    else if _cond == 5
+        ret := 'Price Above Mean\n'
+        ret
+    else if _cond == -1
+        ret := 'Oversold (Weak)\n'
+        ret
+    else if _cond == -2
+        ret := 'Oversold\n'
+        ret
+    else if _cond == -3
+        ret := 'Oversold (Strong)\n'
+        ret
+    else if _cond == -4
+        ret := 'Price Near Mean\n'
+        ret
+    else if _cond == -5
+        ret := 'Price Below Mean\n'
+        ret
+    ret
+
+//-----------------------
+// Chart Drawing Function
+//-----------------------
+format_price(x) =>
+    y = str.tostring(x, '0.00000')
+    if x > 10
+        y := str.tostring(x, '0.000')
+        y
+    if x > 1000
+        y := str.tostring(x, '0.00')
+        y
+    y
+
+f_PriceLine(_ref, linecol) =>
+    line.new(x1=bar_index, x2=bar_index - 1, y1=_ref, y2=_ref, extend=extend.left, color=linecol)
+
+f_MTFLabel(_txt, _yloc) =>
+    label.new(x=time + math.round(ta.change(time) * 20), y=_yloc, xloc=xloc.bar_time, text=mtf_disp_typ == 'Always Display' ? _txt : 'Check MTF', tooltip=mtf_disp_typ == 'Always Display' ? '' : _txt, color=color.black, textcolor=color.white, size=size.normal, style=mtf_disp_typ == 'On Hover' and displayline ? label.style_label_lower_left : label.style_label_left, textalign=text.align_left)
+
+//} Function End
+
+//************************************************************************************************************
+// Calculate Channel
+//************************************************************************************************************
+var tf_0 = timeframe.period
+var tf_1 = get_tf(1)
+var tf_2 = get_tf(2)
+
+[meanline, meanrange, upband1, loband1, upband2, loband2, condition] = get_mrc()
+[mtf1_meanline, mtf1_meanrange, mtf1_upband1, mtf1_loband1, mtf1_upband2, mtf1_loband2, mtf1_condition] = request.security(syminfo.tickerid, tf_1, get_mrc())
+[mtf2_meanline, mtf2_meanrange, mtf2_upband1, mtf2_loband1, mtf2_upband2, mtf2_loband2, mtf2_condition] = request.security(syminfo.tickerid, tf_2, get_mrc())
+
+//************************************************************************************************************
+// Drawing Start {
+//************************************************************************************************************
+float p_meanline = drawchannel ? meanline : na
+float p_upband1 = drawchannel ? upband1 : na
+float p_loband1 = drawchannel ? loband1 : na
+float p_upband2 = drawchannel ? upband2 : na
+float p_loband2 = drawchannel ? loband2 : na
+
+
+
+//-----------------------
+// Draw zone
+//-----------------------
+//---
+var color1 = #FF0000
+var color2 = #FF4200
+var color3 = #FF5D00
+var color4 = #FF7400
+var color5 = #FF9700
+var color6 = #FFAE00
+var color7 = #FFC500
+var color8 = #FFCD00
+//---
+float upband2_1 = drawchannel and displayzone ? upband2 + meanrange * gradsize * 4 : na
+float loband2_1 = drawchannel and displayzone ? loband2 - meanrange * gradsize * 4 : na
+float upband2_2 = drawchannel and displayzone ? upband2 + meanrange * gradsize * 3 : na
+float loband2_2 = drawchannel and displayzone ? loband2 - meanrange * gradsize * 3 : na
+float upband2_3 = drawchannel and displayzone ? upband2 + meanrange * gradsize * 2 : na
+float loband2_3 = drawchannel and displayzone ? loband2 - meanrange * gradsize * 2 : na
+float upband2_4 = drawchannel and displayzone ? upband2 + meanrange * gradsize * 1 : na
+float loband2_4 = drawchannel and displayzone ? loband2 - meanrange * gradsize * 1 : na
+float upband2_5 = drawchannel and displayzone ? upband2 + meanrange * gradsize * 0 : na
+float loband2_5 = drawchannel and displayzone ? loband2 - meanrange * gradsize * 0 : na
+float upband2_6 = drawchannel and displayzone ? upband2 + meanrange * gradsize * -1 : na
+float loband2_6 = drawchannel and displayzone ? loband2 - meanrange * gradsize * -1 : na
+float upband2_7 = drawchannel and displayzone ? upband2 + meanrange * gradsize * -2 : na
+float loband2_7 = drawchannel and displayzone ? loband2 - meanrange * gradsize * -2 : na
+float upband2_8 = drawchannel and displayzone ? upband2 + meanrange * gradsize * -3 : na
+float loband2_8 = drawchannel and displayzone ? loband2 - meanrange * gradsize * -3 : na
+float upband2_9 = drawchannel and displayzone ? upband2 + meanrange * gradsize * -4 : na
+float loband2_9 = drawchannel and displayzone ? loband2 - meanrange * gradsize * -4 : na
+
+//---
+plot_upband2_1 = plot(Showband?upband2_1:na, color=na, display=display.none, transp=100)
+plot_loband2_1 = plot(Showband?loband2_1:na, color=na, display=display.none, transp=100)
+plot_upband2_2 = plot(Showband?upband2_2:na, color=na, display=display.none, transp=100)
+plot_loband2_2 = plot(Showband?loband2_2:na, color=na, display=display.none, transp=100)
+plot_upband2_3 = plot(Showband?upband2_3:na, color=na, display=display.none, transp=100)
+plot_loband2_3 = plot(Showband?loband2_3:na, color=na, display=display.none, transp=100)
+plot_upband2_4 = plot(Showband?upband2_4:na, color=na, display=display.none, transp=100)
+plot_loband2_4 = plot(Showband?loband2_4:na, color=na, display=display.none, transp=100)
+plot_upband2_5 = plot(Showband?upband2_5:na, color=na, display=display.none, transp=100)
+plot_loband2_5 = plot(Showband?loband2_5:na, color=na, display=display.none, transp=100)
+plot_upband2_6 = plot(Showband?upband2_6:na, color=na, display=display.none, transp=100)
+plot_loband2_6 = plot(Showband?loband2_6:na, color=na, display=display.none, transp=100)
+plot_upband2_7 = plot(Showband?upband2_7:na, color=na, display=display.none, transp=100)
+plot_loband2_7 = plot(Showband?loband2_7:na, color=na, display=display.none, transp=100)
+plot_upband2_8 = plot(Showband?upband2_8:na, color=na, display=display.none, transp=100)
+plot_loband2_8 = plot(Showband?loband2_8:na, color=na, display=display.none, transp=100)
+plot_upband2_9 = plot(Showband?upband2_9:na, color=na, display=display.none, transp=100)
+plot_loband2_9 = plot(Showband?loband2_9:na, color=na, display=display.none, transp=100)
+
+//---
+fill(plot_upband2_1, plot_upband2_2, color=color1, transp=gradtransp)
+fill(plot_loband2_1, plot_loband2_2, color=color1, transp=gradtransp)
+fill(plot_upband2_2, plot_upband2_3, color=color2, transp=gradtransp)
+fill(plot_loband2_2, plot_loband2_3, color=color2, transp=gradtransp)
+fill(plot_upband2_3, plot_upband2_4, color=color3, transp=gradtransp)
+fill(plot_loband2_3, plot_loband2_4, color=color3, transp=gradtransp)
+fill(plot_upband2_4, plot_upband2_5, color=color4, transp=gradtransp)
+fill(plot_loband2_4, plot_loband2_5, color=color4, transp=gradtransp)
+fill(plot_upband2_5, plot_upband2_6, color=color5, transp=gradtransp)
+fill(plot_loband2_5, plot_loband2_6, color=color5, transp=gradtransp)
+fill(plot_upband2_6, plot_upband2_7, color=color6, transp=gradtransp)
+fill(plot_loband2_6, plot_loband2_7, color=color6, transp=gradtransp)
+fill(plot_upband2_7, plot_upband2_8, color=color7, transp=gradtransp)
+fill(plot_loband2_7, plot_loband2_8, color=color7, transp=gradtransp)
+fill(plot_upband2_8, plot_upband2_9, color=color8, transp=gradtransp)
+fill(plot_loband2_8, plot_loband2_9, color=color8, transp=gradtransp)
+
+
+
+//////////////////////////////////////////////
+
+
+
+// Make input options that configure backtest date range
+startDate = input.int(title="Start Date",
+     defval=1, minval=1, maxval=31)
+startMonth = input.int(title="Start Month", 
+     defval=1, minval=1, maxval=12)
+startYear = input.int(title="Start Year", 
+     defval=2022, minval=1800, maxval=2100)
+
+endDate = input.int(title="End Date", 
+     defval=1, minval=1, maxval=31)
+endMonth = input.int(title="End Month", 
+     defval=7, minval=1, maxval=12)
+endYear = input.int(title="End Year", 
+     defval=2024, minval=1800, maxval=2100)
+
+FilterTradeTime = input.bool(defval=true,title='Filter Entrytime')
+
+rangemalen = input(20, title='Avg Length Range')
+rangemult = input(2, title='Avg Multiplier Range')
+
+
+//------------------------------Coding the BOX---------------------------------------------------------//
+
+
+//*************Asia Session
+InSession(sessionTime, sessionTimeZone=syminfo.timezone) =>
+    not na(time(timeframe.period, sessionTime, sessionTimeZone))
+
+// STEP 1:
+
+// Define custom session trading times with inputs for *************Asia Session
+sessionTime = input.session("0000-0655", title="Session time Tokyo")
+sessionZone = input.string("UTC", title="Session time zone")
+
+// Other inputs for the boxes' visual appearance *************Asia Session
+boxBorderSize   = input.int(2, title="Box border size", minval=0)
+upBoxColor     = input.color(color.new(color.green, 85), title="Up box")
+upBorderColor  = input.color(color.green, title="Up border")
+downBoxColor   = input.color(color.new(color.red, 85), title="Down box")
+downBorderColor = input.color(color.red, title="Down border")
+
+// Create variables *************Asia Session
+var sessionHighPrice = 0.0
+var sessionLowPrice  = 0.0
+var sessionOpenPrice = 0.0
+var box sessionBox = na
+
+// STEP 2:
+// See if the session is currently active and just started *************Asia Session
+inSession = InSession(sessionTime, sessionZone) and timeframe.isintraday
+sessionStart = inSession and not inSession[1]
+SessionEnd = inSession[1] and not inSession
+
+// STEP 3:
+// When a new session starts, set the session high and low to the data
+// of the bar in the session. *************Asia Session
+if Showlondon?sessionStart:na
+    sessionHighPrice := high
+    sessionLowPrice  := low
+    sessionOpenPrice := open
+// Else, during the session, track the highest high and lowest low
+else if inSession
+    sessionHighPrice := math.max(sessionHighPrice, high)
+    sessionLowPrice  := math.min(sessionLowPrice, low)
+
+// STEP 4:
+// When a session begins, make a new box for that session *************Asia Session
+if Showlondon?sessionStart:na
+    sessionBox := box.new(left=bar_index, top=na, right=na, bottom=na,
+         border_width=boxBorderSize)
+
+// STEP 5:
+// During the session, update that session's existing box *************Asia Session
+if Showlondon?inSession:na
+    box.set_top(sessionBox, sessionHighPrice)
+    box.set_bottom(sessionBox, sessionLowPrice)
+  
+    box.set_right(sessionBox, bar_index + 1)
+
+    // See if bar closed higher than session open. When it did, make
+    // box green (and use red otherwise).
+    if Showlondon?(close > sessionOpenPrice):na
+        box.set_bgcolor(sessionBox, upBoxColor)
+        box.set_border_color(sessionBox, upBorderColor)
+    else
+        box.set_bgcolor(sessionBox, downBoxColor)
+        box.set_border_color(sessionBox, downBorderColor)
+
+
+//------------------------------End of Coding the BOX---------------------------------------------------------//
+
+// Look if the close time of the current bar
+// falls inside the date range
+inDateRange = (time >= timestamp(syminfo.timezone, startYear,
+         startMonth, startDate, 0, 0)) and
+     (time < timestamp(syminfo.timezone, endYear, endMonth, endDate, 0, 0))
+
+// Save Previous Max & Min Asia Session
+Minpreday = ta.valuewhen(SessionEnd,sessionLowPrice,0)
+Maxpreday = ta.valuewhen(SessionEnd,sessionHighPrice,0)
+
+// Identify last bar in box
+Lastbarinbox = ta.valuewhen(SessionEnd,close,0)
+
+
+//Entry Long London BreakOut
+Conditionlong = if (high >= Maxpreday)
+    1
+else
+    0
+
+//Entry Short London BreakOut
+Conditionshort = if (low <= Minpreday)
+    1
+else
+    0
+
+
+
+//-------------------------Define TP & SL------------------------//
+
+
+// Define Stoploss = Midrange Box 
+Stoploss = ((Maxpreday-Minpreday)/2) + Minpreday
+plot(Showlondon?Stoploss:na,title = "Entryline", color = color.rgb(231, 10, 10), style = plot.style_line,linewidth = 2,editable = false)
+
+// Define dynamic TP based on CRV
+CRV_Faktor = input.float(title="CRV",minval=0, maxval=10, defval=1.0, step = 0.1)
+
+// Get price of last entry in position
+lastEntryPrice = strategy.opentrades.entry_price(strategy.opentrades - 1)
+
+float Tp_Long = 0.0
+Tp_Long := ((lastEntryPrice - Stoploss)*CRV_Faktor)+lastEntryPrice
+//Tp_Long := math.round((box.get_top(sessionBox[1])-box.get_bottom(sessionBox[1]))*10000)
+
+
+float Tp_Short = 0.0
+Tp_Short := lastEntryPrice-((Stoploss - lastEntryPrice)*CRV_Faktor)
+
+
+//-------------------------End of TP & SL------------------------//
+
+//Limit one Order per session
+
+var entry_long_before = false
+entry_long_before := sessionStart ? false : entry_long_before
+
+var entry_short_before = false
+entry_short_before := sessionStart ? false : entry_short_before
+
+//Trading Session from X until Y
+tradinghours = time(timeframe.period, "0700-1600", "UTC")
+time_condition = FilterTradeTime ? not na(tradinghours) : true
+bgcolor(not na(Showlondon?tradinghours:na) ? color.rgb(73, 196, 78, 90) : na)
+
+
+if Showlondon?(inDateRange and time_condition and Conditionshort == 1 and not entry_short_before and not entry_long_before):na
+    strategy.entry("Enter short", strategy.short, comment="entry short")
+    entry_short_before := true // Counter setzen oder mit qty arbeiten
+strategy.exit("Exit short", from_entry="Enter short", comment_profit = "TP Short", comment_loss = "SL Short", limit = Tp_Short, stop = Stoploss)
+if (hour == 00)
+    strategy.close(id = "Enter short", comment = "Exit Time")
+if not time_condition
+    strategy.cancel("Enter short")
+
+
+if Showlondon?(inDateRange and time_condition and Conditionlong == 1 and not entry_long_before and not entry_short_before):na
+    strategy.entry("Enter long", strategy.long, comment="entry long")
+    entry_long_before := true // counter plus 1 
+strategy.exit("Exit long", from_entry="Enter long", comment_profit = "TP Long", comment_loss = "SL Long", limit = Tp_Long, stop = Stoploss)
+if (hour == 00)
+    strategy.close(id = "Enter long", comment = "Exit Time")
+if not time_condition
+    strategy.cancel("Enter long")
+
+
+
+
+// Problem ist, dass er immer der reihe nach geht. Entry long oder short darf nur auf true gesetzt werden, wenn die order auch tatsächlich ausgelöst wurde und nicht nur platziert wurde
+    
+//STEP 4:
+// Exit open market position when date range ends.
+if Showlondon?(not inDateRange):na
+    strategy.close_all()
+
+
+
+////////////////////////////////////////////////////
+
+
+
+//Settings
+//-----------------------------------------------------------------------------{
+
+disp    = display.all - display.status_line
+
+kzGR    = 'Killzones'
+asSH    = input(true, '', inline = 'asia', group = kzGR)
+asST    = input.string('Asian', '', inline = 'asia', group = kzGR, display = disp)
+asS     = input.session('2000-0000', '', inline = 'asia', group = kzGR, display = disp)
+asC     = input.color(color.new(#e91e63, 90), '', inline = 'asia', group = kzGR)
+
+ldnOSH  = input(true, '', inline = 'ldno', group = kzGR)
+ldnOST  = input.string('London', '', inline = 'ldno', group = kzGR, display = disp)
+ldnOS   = input.session('0200-0500', '', inline = 'ldno', group = kzGR, display = disp)
+ldnOC   = input.color(color.new(#00bcd4, 90), '', inline = 'ldno', group = kzGR)
+
+nySH    = input(true,   '', inline = 'nyam', group = kzGR)
+nyST    = input.string('New York AM', '', inline = 'nyam', group = kzGR, display = disp)
+nyS     = input.session('0830-1100', '', inline = 'nyam', group = kzGR, display = disp)
+nyC     = input.color(color.new(#ff5d00, 90), '', inline = 'nyam', group = kzGR)
+
+ldnCSH  = input(true, '', inline = 'nypm', group = kzGR)
+ldnCST  = input.string('New York PM', '', inline = 'nypm', group = kzGR, display = disp)
+ldnCS   = input.session('1330-1600', '', inline = 'nypm', group = kzGR, display = disp)
+ldnCC   = input.color(color.new(#2157f3, 90), '', inline = 'nypm', group = kzGR)
+
+kzMML   = input(true,   'Killzone Lines : Top/Bottom', inline = 'LN', group = kzGR)
+kzML    = input(false,  'Mean', inline = 'LN', group = kzGR)
+kzLE    = input(true,  'Extend Top/Bottom', inline = 'LN', group = kzGR)
+kzLB    = input(true,  'Killzone Labels', group = kzGR)
+kzSH    = input.int(15, 'Display Killzones within Timeframes Up To', options = [1, 3, 5, 15, 30, 45, 60], group = kzGR, display = disp)
+dwmO    = input.string('None', 'Open Price of', options = ['Killzones', 'the Day', 'the Week', 'the Month', 'None'], inline = 'OP', group = kzGR, display = disp)
+dwmS    = input.bool(true, 'Separator', inline = 'OP', group = kzGR)
+dwmC    = input(color.new(color.gray, 89), '', inline = 'OP', group = kzGR)
+dwmL    = input.bool(true, 'Label', inline = 'OP', group = kzGR)
+
+obbGR   = 'Order Blocks & Breaker Blocks'
+obSH    = input.bool(true, 'Order Blocks | Breaker Blocks', inline = 'OB', group = obbGR)
+bbSH    = input.bool(false, '', inline = 'OB', group = obbGR)
+
+obbLN   = input.int(5, 'Swing Detection Length', minval = 3, group = obbGR, display = disp)
+obbMT   = input.string('Closing Price', 'Mitigation Price', options = ['Closing Price', 'Wick'], group = obbGR, display = disp)
+obbMP   = obbMT == 'Closing Price'
+useBody = input(false, 'Use Candle Body in Detection', group = obbGR)
+obbR    = input.bool(true, 'Remove Mitigated Order Blocks & Breaker Blocks', group = obbGR)
+extTT   = 'In this context, "extend" refers to the action of projecting or elongating the visual objects beyond the boundaries of the killzones.'
+obbEX   = input.bool(true, 'Extend Order Blocks & Breaker Blocks', group = obbGR, tooltip = extTT)
+obbSH   = input.string('First', 'Display Order Blocks & Breaker Blocks', options = ['All', 'First', 'Last'], group = obbGR, display = disp)
+
+bullOC  = input(color.new(#2157f3, 80), 'Order Blocks  : Bullish'   , inline = 'OBC', group = obbGR)
+bearOC  = input(color.new(#ff5d00, 80), 'Bearish'   , inline = 'OBC', group = obbGR)
+bullBC  = input(color.new(#ff1100, 80), 'Breaker Blocks : Bullish', inline = 'BBC', group = obbGR)
+bearBC  = input(color.new(#0cb51a, 80), 'Bearish', inline = 'BBC', group = obbGR)
+obbTX   = input.bool(true, 'Show Order Blocks & Breaker Blocks Text', group = obbGR)
+
+mssGR   = 'Market Structure Shifts'
+mssSH   = input.bool(false, 'Market Structure Shifts', group = mssGR)
+mssLN   = input.int(7, "Detection Length", minval = 1, group = mssGR, display = disp)
+mssDO   = input.string('First', 'Display Market Structure Shifts', options = ['All', 'First', 'Last'], group = mssGR, display = disp)
+ppLCB   = input.color(color.new(color.teal, 0), 'Market Structure Shifts : Bullish', inline = 'MSS', group = mssGR)
+ppLCS   = input.color(color.new(color.red, 0), 'Bearish', inline = 'MSS', group = mssGR)
+mssTX   = input.bool(true, 'Show Market Structure Shifts Text', group = mssGR)
+
+fvgGR   = 'Fair Value Gaps'
+fvgSH   = input.bool(true, 'Fair Value Gaps', group = fvgGR)
+fvgTT   = 'The script showcases fair value gaps that exceed a predetermined length calculated by multiplying the fixed-average true range (ATR) value by the option\'s value.\n\n' + 
+           'The option value set to 0 means no filtering is applied.\n\n' + 
+           'Remark: No filtering will be implemented for the initial 144 candles based on the fixed-length ATR, as the ATR value won\'t be available during this period.'
+fvgTH   = input.float(1.2, 'Fair Value Gap Width Filter', minval = 0, step = .1, tooltip = fvgTT, group = fvgGR, display = disp)
+fvgR    = input.bool(true, 'Remove Mitigated Fair Value Gaps', group = fvgGR)
+fvgE    = input.bool(true, 'Extend Fair Value Gaps', group = fvgGR, tooltip = extTT)
+fvgDO   = input.string('First', 'Display Fair Value Gaps', options = ['All', 'First', 'Last'], group = fvgGR, display = disp)
+fvgBC   = input.color(color.new(#4caf50, 80), 'Bullish Imbalance', group = fvgGR)
+fvgSC   = input.color(color.new(color.red, 80), 'Bearish Imbalance', group = fvgGR)
+fvgTX   = input.bool(true, 'Show Fair Value Gaps Text', group = fvgGR)
+
+//-----------------------------------------------------------------------------}
+// User Defined Types
+//-----------------------------------------------------------------------------{
+
+type bar
+    float o = open
+    float h = high
+    float l = low
+    float c = close
+    int   t = time
+    int   i = bar_index
+    
+type OB
+    float top  = na
+    float btm  = na
+    int   obI  = bar_index
+    box   bxOB
+    bool  ext  = true
+
+type BB
+    box   bxOB
+    box   bxBB
+    bool  ext  = true
+    bool  bb   = false
+    int   bbI  = na
+    int   lst  = na
+
+type swing
+    float y = na
+    int   i = na
+    bool  x = false
+
+type pivotPoint
+    float  h
+    int    hi
+    bool   hx 
+
+    float  l
+    int    li
+    bool   lx
+
+type KZ
+    line  lnT
+    line  lnM
+    line  lnB
+    line  lnO
+    label lb
+    label lbO
+
+type DWM
+    line  ln
+    label lb
+
+type MSS
+    line  ln
+    box   bx
+
+type FVG
+    box   bx
+    bool  e
+
+//-----------------------------------------------------------------------------}
+// Variables
+//-----------------------------------------------------------------------------{
+
+bar b = bar.new()
+
+tfM = timeframe.multiplier
+
+nyam    = not na(time(timeframe.period, nyS  , 'UTC-5')) and nySH   and tfM <= kzSH
+ldnO  = not na(time(timeframe.period, ldnOS, 'UTC-5')) and ldnOSH and tfM <= kzSH
+ldnC  = not na(time(timeframe.period, ldnCS, 'UTC-5')) and ldnCSH and tfM <= kzSH
+asian = not na(time(timeframe.period, asS  , 'UTC-5')) and asSH   and tfM <= kzSH
+
+inKZ  = nyam or ldnO or ldnC or asian
+var KZ kz = KZ.new()
+
+var DWM dwm = DWM.new()
+
+var bOB = array.new<OB>(0)
+var aOB = array.new<OB>(0)
+
+var bBB = array.new<BB>(0)
+var aBB = array.new<BB>(0)
+
+var bLS = array.new_int()
+var aLS = array.new_int()
+
+
+var bMSS = array.new<MSS>(0)
+var aMSS = array.new<MSS>(0)
+
+var pivotPoint pp = pivotPoint.new()
+var shift = 0
+
+var bFVG = array.new<FVG>(0)//FVG.new(array.new <box>  (na))
+var aFVG = array.new<FVG>(0)//FVG.new(array.new <box>  (na))
+fvgATR = nz(ta.atr(144)) * fvgTH
+//var bool last = na 
+
+//-----------------------------------------------------------------------------}
+// Functions / Methods
+//-----------------------------------------------------------------------------{
+
+swings(_l)=>
+    var os = 0
+    var swing top = swing.new(na, na)
+    var swing btm = swing.new(na, na)
+    
+    upper = ta.highest(_l)
+    lower = ta.lowest(_l)
+
+    os := high[_l] > upper ? 0 : low[_l] < lower ? 1 : os
+
+    if os == 0 and os[1] != 0
+        top := swing.new(high[_l], bar_index[_l])
+    
+    if os == 1 and os[1] != 1
+        btm := swing.new(low[_l], bar_index[_l])
+
+    [top, btm]
+
+method killzones(KZ _id, _s, _kz, _o, _h, _l, _c, _t, _cr, _tx, _mml, _ml, _lb, _le, _ol, _olC, _olL, areaCss)=>
+    var float max = na, var float mid = na, var float min = na 
+    var int sbT = na, var bool xt = na, var bool xb = na
+    var box area = na
+    var tC = color.rgb(color.r(_cr), color.g(_cr), color.b(_cr))
+    
+    if Showtime?(_s and not _s[1]):na
+        max := _h
+        sbT := _t
+        min := _l
+        mid := math.avg(max, min)
+        area := box.new(bar_index, max, bar_index, min, na, bgcolor = areaCss)
+
+        if _mml
+            _id.lnT := line.new(sbT, max, sbT, max, xloc.bar_time, color = tC)//, xt := true
+            _id.lnB := line.new(sbT, min, sbT, min, xloc.bar_time, color = tC)//, xb := true
+
+        if _ml
+            _id.lnM := line.new(sbT, mid, sbT, mid, xloc.bar_time, color = tC, style = line.style_dotted)
+        
+        if _ol
+            _id.lnO := line.new(sbT, _o, sbT, _o, xloc.bar_time, color = color.new(_olC, 0), style = line.style_dotted)
+
+            if _olL
+                _id.lbO := label.new(sbT, _o, 'KZO(' + str.tostring(_o, format.mintick) + ')', xloc.bar_time, color = color(na), style = label.style_label_left, textcolor = color.new(_olC, 0), size = size.tiny)
+
+        if _lb
+            _id.lb := label.new(sbT, max, _tx, xloc.bar_time, color = #ffffff00, style = label.style_label_down, textcolor = tC, size = size.small)
+    
+    if _s
+        max := math.max(_h, max)
+        min := math.min(_l, min)
+        mid := math.avg(max, min)
+        xt := true
+        xb := true
+
+        area.set_top(max)
+        area.set_rightbottom(bar_index, min)
+
+        if _lb
+            label.set_x(_id.lb, int(math.avg(_t, sbT))), label.set_y(_id.lb, max)
+
+        if _mml
+            _id.lnT.set_y1(max), _id.lnT.set_xy2(_t, max)
+            _id.lnB.set_y1(min), _id.lnB.set_xy2(_t, min)
+        
+        if _ml
+            _id.lnM.set_y1(mid), _id.lnM.set_xy2(_t, mid)
+        
+        if _ol 
+            _id.lnO.set_x2(_t)
+
+            if _olL
+                _id.lbO.set_x(_t)
+    
+    if not _s and _le and not _kz
+
+        if _mml
+            if xt 
+                if _h < _id.lnT.get_y1()
+                    _id.lnT.set_x2(_t)
+                else 
+                    _id.lnT.set_x2(_t)
+                    xt := false
+
+            if xb
+                if _l > _id.lnB.get_y1()
+                    _id.lnB.set_x2(_t)
+                else 
+                    _id.lnB.set_x2(_t)
+                    xb := false
+
+        if _ml
+            _id.lnM.set_x2(_t)
+
+method pDWM(DWM _id, _tC, _t, _o, _cl, _lbTX, _olL) =>
+    if _tC
+        _id.lb.delete()
+        _id.ln := line.new(_t, _o, _t, _o, xloc.bar_time, extend.none, color.new(_cl, 0), line.style_dotted, 1)
+
+        if _olL
+            _id.lb := label.new(_t, _o, _lbTX + '(' + str.tostring(_o, format.mintick) + ')', xloc.bar_time, yloc.price, color(na), label.style_label_left, color.new(_cl, 0), size.tiny)
+    else
+        _id.ln.set_x2(_t)
+
+        if _olL
+            _id.lb.set_x(_t)
+        na
+
+pOBB(_s, _o, _h, _l, _c, _i, _t, _st, _sb, _mx, _mn, _cOBb, _cBBb, _cOBa, _cBBa, _obS, _bbS, _obbM, _obbTX, _obbE, _obbD, _obbR) => 
+
+    var int sbI = 0, var bool xb = na, var bool xa = na//, var bool zb = na
+
+    if _s and not _s[1]
+        sbI := _i, xb := true, xa := true//, zb := true
+        
+        if _obbE
+            if bOB.size() > 0
+                for i = bOB.size() - 1 to 0
+                    bOB.remove(i)
+
+            if aOB.size() > 0
+                for i = aOB.size() - 1 to 0
+                    aOB.remove(i)
+
+            if bBB.size() > 0
+                for i = bBB.size() - 1 to 0
+                    bBB.remove(i)
+
+            if aBB.size() > 0
+                for i = aBB.size() - 1 to 0
+                    aBB.remove(i)
+
+    if Showtime?_s:na
+        if _c[1] > _st.y and not _st.x and _st.i >= sbI
+            _st.x := true
+
+            minima = _mx[1]
+            maxima = _mn[1]
+            sBT = _t[1]
+
+            for i = 1 to (_i - _st.i) - 1
+                minima := math.min(_mn[i], minima)
+                maxima := minima == _mn[i] ? _mx[i] : maxima
+                sBT := minima == _mn[i] ? _t[i] : sBT
+            
+            bOB.unshift(OB.new(maxima, minima, sBT, 
+                         box.new(na, na, na, na, color(na), xloc = xloc.bar_time, text = _obbTX ? 'OB' : '', text_size = size.tiny, text_halign = text.align_center, text_valign = text.align_center, text_color = color.new(_cOBb, 0)))) 
+            bBB.unshift(BB.new(
+                         box.new(na, na, na, na, color(na), xloc = xloc.bar_time), 
+                         box.new(na, na, na, na, color(na), xloc = xloc.bar_time, text = _obbTX ? 'BB' : '', text_size = size.tiny, text_halign = text.align_center, text_valign = text.align_center, text_color = color.new(_cBBb, 0))))
+
+        if _c[1] < _sb.y and not _sb.x and _st.i >= sbI 
+            _sb.x := true
+
+            minima = _mn[1]
+            maxima = _mx[1]
+            sBT = _t[1]
+
+            for i = 1 to (_i - _sb.i) - 1
+                maxima := math.max(_mx[i], maxima)
+                minima := maxima == _mx[i] ? _mn[i] : minima
+                sBT := maxima == _mx[i] ? _t[i] : sBT
+
+            aOB.unshift(OB.new(maxima, minima, sBT, 
+                         box.new(na, na, na, na, color(na), xloc = xloc.bar_time, text = _obbTX ? 'OB' : '', text_size = size.tiny, text_halign = text.align_center, text_valign = text.align_center, text_color = color.new(_cOBa, 0)))) 
+            aBB.unshift(BB.new(
+                         box.new(na, na, na, na, color(na), xloc = xloc.bar_time), 
+                         box.new(na, na, na, na, color(na), xloc = xloc.bar_time, text = _obbTX ? 'BB' : '', text_size = size.tiny, text_halign = text.align_center, text_valign = text.align_center, text_color = color.new(_cBBa, 0))))
+
+    if _obbE ? true : _s
+
+        if bOB.size() > 0
+            for i = bOB.size() - 1 to 0
+                ob = bOB.get(i)
+                bb = bBB.get(i)
+
+                if _obbR 
+                    if not ob.ext
+                        ob.bxOB.delete()
+
+                    if not bb.ext
+                        bb.bxOB.delete(), bb.bxBB.delete()
+
+                if not bb.bb 
+                    if _obS and (_obbD == 'First' ? i == bOB.size() - 1 : true)
+                        ob.bxOB.set_lefttop(ob.obI, ob.top)
+                        ob.bxOB.set_rightbottom(_t, ob.btm)
+                        ob.bxOB.set_bgcolor((_obbD == 'Last' ? i == 0 ? _cOBb : color(na): _cOBb))
+                        ob.bxOB.set_text_color((_obbD == 'Last' ? i == 0 ? color.new(_cOBb, 0) : color(na): color.new(_cOBb, 0)))
+
+                    if math.min((_obbM ? _c[1] : _l[1]), _o[1]) < ob.btm
+                        bb.bb := true
+
+                        if _obS
+                            ob.bxOB.set_right(_t[1])
+                            ob.ext := false
+
+                        if _bbS and xb
+                            bb.bbI := _t[1]
+                            bb.bxBB.set_lefttop(bb.bbI, ob.top)
+                            bb.bxBB.set_rightbottom(_t, ob.btm)
+                            bb.bxBB.set_bgcolor(_cBBb)
+
+                            if not _obS or _obbR or not (_obbD == 'First' ? i == bOB.size() - 1 : true)
+                                bb.bxOB.set_lefttop(ob.obI, ob.top)
+                                bb.bxOB.set_rightbottom(bb.bbI, ob.btm)
+                                bb.bxOB.set_bgcolor(color(na))
+                                bb.bxOB.set_border_color(_cBBb)
+
+                            if _obbD == 'First'
+                                xb := false
+
+                            if _obbD == 'Last'
+                                bLS.push(bb.bbI)
+
+                else
+                    if (_obbM ? _c[1] : _h[1]) > ob.top
+                        bb.ext := false
+
+                    if _obS
+                        ob.bxOB.set_bgcolor((_obbD == 'Last' ? i == 0 ? _cOBb : color(na): _cOBb))
+                        ob.bxOB.set_text_color((_obbD == 'Last' ? i == 0 ? color.new(_cOBb, 0) : color(na): color.new(_cOBb, 0)))
+
+                    if _bbS and bb.ext
+                        bb.bxBB.set_right(_t)
+
+                    if _bbS
+                        if _obbD == 'Last' //and zb
+                            if i != 0
+                                bb.bxOB.set_lefttop(ob.obI, ob.top)
+                                bb.bxOB.set_rightbottom(bb.bbI, ob.btm)
+                                bb.bxOB.set_bgcolor(color(na))
+                                bb.bxOB.set_border_color(_cBBb)
+
+                            if bLS.max() != bb.bxBB.get_left()
+                                bb.bxBB.set_bgcolor(color(na))
+                                bb.bxBB.set_text_color(color(na))
+                                bb.bxOB.set_border_color(color(na))
+
+        //bLS.clear()
+
+        if aOB.size() > 0
+            for i = aOB.size() - 1 to 0
+                ob = aOB.get(i)
+                bb = aBB.get(i)
+
+                if _obbR 
+                    if not ob.ext
+                        ob.bxOB.delete()
+
+                    if not bb.ext
+                        bb.bxOB.delete(), bb.bxBB.delete()
+
+                if not bb.bb 
+                    if _obS and (_obbD == 'First' ? i == aOB.size() - 1 : true)
+                        ob.bxOB.set_lefttop(ob.obI, ob.top)
+                        ob.bxOB.set_rightbottom(_t, ob.btm)
+                        ob.bxOB.set_bgcolor((_obbD == 'Last' ? i == 0 ? _cOBa : color(na) : _cOBa))
+                        ob.bxOB.set_text_color((_obbD == 'Last' ? i == 0 ? color.new(_cOBa, 0) : color(na): color.new(_cOBa, 0)))
+
+                    if math.max((_obbM ? _c[1] : _h[1]), _o[1]) > ob.top
+                        bb.bb := true
+
+                        if _obS
+                            ob.bxOB.set_right(_t[1])
+                            ob.ext := false
+
+                        if _bbS and xa
+                            bb.bbI := _t[1]
+                            bb.bxBB.set_lefttop(bb.bbI, ob.top)
+                            bb.bxBB.set_rightbottom(_t, ob.btm)
+                            bb.bxBB.set_bgcolor(_cBBa)
+
+                            if not _obS or _obbR or not (_obbD == 'First' ? i == aOB.size() - 1 : true)
+                                bb.bxOB.set_lefttop(ob.obI, ob.top)
+                                bb.bxOB.set_rightbottom(bb.bbI, ob.btm)
+                                bb.bxOB.set_bgcolor(color(na))
+                                bb.bxOB.set_border_color(_cBBa)
+                            
+                            if _obbD == 'First'
+                                xa := false
+
+                            if _obbD == 'Last'
+                                aLS.push(bb.bbI)
+                else
+                    if (_obbM ? _c[1] : _l[1]) < ob.btm
+                        bb.ext := false
+
+                    if _obS
+                        ob.bxOB.set_bgcolor((_obbD == 'Last' ? i == 0 ? _cOBa : color(na): _cOBa))
+                        ob.bxOB.set_text_color((_obbD == 'Last' ? i == 0 ? color.new(_cOBa, 0) : color(na): color.new(_cOBa, 0)))
+
+                    if _bbS and bb.ext 
+                        bb.bxBB.set_right(_t)
+                    
+                    if _bbS
+                        if _obbD == 'Last'
+                            if i != 0
+                                bb.bxOB.set_lefttop(ob.obI, ob.top)
+                                bb.bxOB.set_rightbottom(bb.bbI, ob.btm)
+                                bb.bxOB.set_bgcolor(color(na))
+                                bb.bxOB.set_border_color(_cBBa)
+
+                            if aLS.max() != bb.bxBB.get_left()
+                                bb.bxBB.set_bgcolor(color(na))
+                                bb.bxBB.set_text_color(color(na))
+                                bb.bxOB.set_border_color(color(na))
+
+    else if not _obbE
+        if bOB.size() > 0
+            for i = bOB.size() - 1 to 0
+                bOB.remove(i)
+
+        if aOB.size() > 0
+            for i = aOB.size() - 1 to 0
+                aOB.remove(i)
+
+        if bBB.size() > 0
+            for i = bBB.size() - 1 to 0
+                bBB.remove(i)
+
+        if aBB.size() > 0
+            for i = aBB.size() - 1 to 0
+                aBB.remove(i)
+        na
+
+pFVG(_s, _h, _l, _c, _i, _atr, _fR, _fE, _fD, _fTX, _fbC, _faC) =>
+
+    var bool xb = na, var bool xa = na
+
+    if _s and not _s[1]
+        xb := true, xa := true
+        if _fE
+            if bFVG.size() > 0
+                for i = bFVG.size() - 1 to 0
+                    bFVG.remove(i)
+
+            if aFVG.size() > 0
+                for i = aFVG.size() - 1 to 0
+                    aFVG.remove(i)
+
+    bullG = _l > _h[1]
+    bearG = _h < _l[1]
+
+    if Showtime?_s:na
+        bull  = (_l - _h[2]) > _atr and _l > _h[2] and _c[1] > _h[2] and not (bullG or bullG[1])
+
+        if bull and xb
+            bFVG.unshift(FVG.new(box.new(_i - 1, _l, _i, _h[2], na, bgcolor = _fbC, text = _fTX ? 'FVG' : '', text_size = size.tiny, text_halign = text.align_center, text_valign = text.align_center, text_color = color.new(_fbC, 0)), true))
+            
+            if _fD == 'First'
+                xb := false
+        
+            if bFVG.size() > 1
+                if _fD == 'Last'
+                    fvg = bFVG.pop()
+                    fvg.bx.delete()
+
+        bear  = (_l[2] - _h) > _atr and _h < _l[2] and _c[1] < _l[2] and not (bearG or bearG[1])
+
+        if bear and xa
+            aFVG.unshift(FVG.new(box.new(_i - 1, _l[2], _i, _h, na, bgcolor = _faC, text = _fTX ? 'FVG' : '', text_size = size.tiny, text_halign = text.align_center, text_valign = text.align_center, text_color = color.new(_faC, 0)), true))
+
+            if _fD == 'First'
+                xa := false
+
+            if aFVG.size() > 1
+                if _fD == 'Last'
+                    fvg = aFVG.pop()
+                    fvg.bx.delete()
+
+    if _fE ? true : _s
+        if bFVG.size() > 0 
+            for i = bFVG.size() - 1 to 0
+
+                fvg  = bFVG.get(i)
+                fvgB = fvg.bx.get_bottom()
+
+                if fvg.e
+                    if _l < fvgB
+                        fvg.bx.set_right(_i)
+
+                        if _fR
+                            fvg.bx.delete()
+                        fvg.e := false
+                    else
+                        fvg.bx.set_right(_i)
+
+        if aFVG.size() > 0
+            for i = aFVG.size() - 1 to 0
+
+                fvg  = aFVG.get(i)
+                fvgT = fvg.bx.get_top()
+
+                if fvg.e
+                    if _h > fvgT
+                        fvg.bx.set_right(_i)
+
+                        if _fR
+                            fvg.bx.delete()
+                        fvg.e := false
+                        na
+                    else
+                        fvg.bx.set_right(_i)
+
+    else if not _fE
+        if bFVG.size() > 0
+            for i = bFVG.size() - 1 to 0
+                bFVG.remove(i)
+
+        if aFVG.size() > 0
+            for i = aFVG.size() - 1 to 0
+                aFVG.remove(i)
+        na
+
+//-----------------------------------------------------------------------------}
+// Calculations - Killzones
+//-----------------------------------------------------------------------------{
+kzO = dwmO == 'Killzones'
+
+kz.killzones(nyam    and timeframe.isintraday, inKZ, b.o, b.h, b.l, b.c, b.t, nyC  , nyST  , kzMML, kzML, kzLB, kzLE, kzO, dwmC, dwmL, nyC)
+kz.killzones(ldnO  and timeframe.isintraday, inKZ, b.o, b.h, b.l, b.c, b.t, ldnOC, ldnOST, kzMML, kzML, kzLB, kzLE, kzO, dwmC, dwmL, ldnOC)
+kz.killzones(ldnC  and timeframe.isintraday, inKZ, b.o, b.h, b.l, b.c, b.t, ldnCC, ldnCST, kzMML, kzML, kzLB, kzLE, kzO, dwmC, dwmL, ldnCC)
+kz.killzones(asian and timeframe.isintraday, inKZ, b.o, b.h, b.l, b.c, b.t, asC  , asST  , kzMML, kzML, kzLB, kzLE, kzO, dwmC, dwmL, asC)
+
+[xChg, xTxt] = switch dwmO
+    'the Day'   => [timeframe.change('D'), 'DO']
+    'the Week'  => [timeframe.change('W'), 'WO']
+    'the Month' => [timeframe.change('M'), 'MO']
+
+if not kzO and timeframe.isintraday and tfM <= kzSH
+    dwm.pDWM(xChg, b.t, b.o, dwmC, xTxt, dwmL)
+
+bgcolor(dwmS and not kzO and timeframe.isintraday and tfM <= kzSH ? xChg ? dwmC : na : na)
+
+//-----------------------------------------------------------------------------}
+// Calculations - Order Blocks & Breaker Blocks
+//-----------------------------------------------------------------------------{
+
+[top, btm] = swings(obbLN)
+max = useBody ? math.max(b.c, b.o) : b.h
+min = useBody ? math.min(b.c, b.o) : b.l
+
+if obSH or bbSH
+    pOBB(inKZ, b.o, b.h, b.l, b.c, b.i, b.t, top, btm, max, min, bullOC, bullBC, bearOC, bearBC, obSH, bbSH, obbMP, obbTX, obbEX, obbSH, obbR)
+
+//-----------------------------------------------------------------------------}
+// Calculations - Market Structure Shifts
+//-----------------------------------------------------------------------------{
+
+pp_h = ta.pivothigh(mssLN, mssLN)
+pp_l = ta.pivotlow (mssLN, mssLN)
+
+if not na(pp_h)
+    pp.h  := pp_h
+    pp.hx := false
+    pp.hi := b.i - mssLN
+
+if not na(pp_l)
+    pp.l  := pp_l
+    pp.lx := false
+    pp.li := b.i - mssLN
+
+if not inKZ
+    pp.l := 0
+    pp.h := 10e8
+    shift := 0
+
+    if bMSS.size() > 0
+        for i = bMSS.size() - 1 to 0
+            bMSS.remove(i)
+
+    if aMSS.size() > 0
+        for i = aMSS.size() - 1 to 0
+            aMSS.remove(i)
+
+if Showtime?(mssSH and inKZ):na
+    if b.c[1] > pp.h and not pp.hx
+        pp.hx := true
+
+        if shift == -1 or shift == 0
+            if (mssDO == 'First' ? bMSS.size() < 1 : true)
+                bMSS.unshift(MSS.new(line.new(pp.hi, pp.h, b.i - 1, pp.h, color = ppLCB), 
+                 box.new(pp.hi, pp.h, b.i - 1, pp.h, text = 'CHoCH', text_size = size.tiny, text_halign = text.align_left, text_valign = text.align_bottom, text_color = mssTX ? ppLCB : color(na), bgcolor = color(na), border_color = color(na))
+                 ))
+
+            if bMSS.size() > 1
+                if mssDO == 'Last'
+                    mss = bMSS.pop()
+                    mss.ln.delete(), mss.bx.delete()
+
+        shift := 1
+
+    if b.c[1] < pp.l and not pp.lx
+        pp.lx := true
+
+        if shift == 1 or shift == 0
+            if (mssDO == 'First' ? aMSS.size() < 1 : true)
+                aMSS.unshift(MSS.new(line.new(pp.li, pp.l, b.i - 1, pp.l, color = ppLCS), 
+                 box.new(pp.li, pp.l, b.i - 1, pp.l, text = 'CHoCH', text_size = size.tiny, text_halign = text.align_left, text_valign = text.align_top, text_color = mssTX ? ppLCS : color(na), bgcolor = color(na), border_color = color(na))
+                 ))
+
+            if aMSS.size() > 1
+                if mssDO == 'Last'
+                    mss = aMSS.pop()
+                    mss.ln.delete(), mss.bx.delete()
+
+        shift := -1
+
+//-----------------------------------------------------------------------------}
+// Calculations - Fair Value Gaps
+//-----------------------------------------------------------------------------{
+
+if fvgSH 
+    pFVG(inKZ, b.h, b.l, b.c, b.i, fvgATR, fvgR, fvgE, fvgDO, fvgTX, fvgBC, fvgSC)
+
+//-----------------------------------------------------------------------------}
+
+

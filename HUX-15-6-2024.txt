@@ -1,0 +1,613 @@
+
+//@version=5
+indicator('HUX 3.0-15/6/2024 ','⩖',overlay = true, max_labels_count = 500, max_boxes_count = 500, max_lines_count = 500, max_bars_back = 1000)
+
+Taikhoan = input.float(0, "tiền trong ví", step = 0.01, group="TÍNH TIỀN")
+ruiro = input.float(15, " % rủi ro", step = 1, group="TÍNH TIỀN",tooltip = "nên trong khoảng 10 đến 20")
+donbay = input.float(1, " Đòn bẩy", step = 1, group="TÍNH TIỀN",tooltip = "vào lệnh bằng đơn vị USDT trên điện thoại thì cho bằng 1 và vẫn max bẩy như thường, còn nếu vào trên pc thì để bẩy theo web")
+etlo= input.float(0, "SL", step = 0.0001, group="TÍNH TIỀN",tooltip = "Điền SL")
+enchi = close
+
+ShowSmartTrail = input.bool(true, 'SMT 1', group = 'ON/OFF',inline = '1')
+ShowSmartTrail2 = input.bool(true, 'SMT 2', group = 'ON/OFF',inline = '1')
+ShowSonicR = input(false, "SONICR", inline = 'overlayLine2', group = 'ON/OFF')
+ShowSR = input(true, "CUNG CẦU", inline = 'overlayLine2', group = 'ON/OFF')
+Ichimocua = input(false, "ICHIMOKU", inline = '3', group = 'ON/OFF')
+DB= input.bool(true, "TÍNH 💵",inline = '3',group = "ON/OFF")
+TINHIEU = input(true, "SIGNAL",inline = "4",group = "ON/OFF")
+showStop = input(false,"Stop loss", group="ON/OFF",inline = "4" )
+ShowSmartNLN = input.bool(false, 'Trend Cloud', group = 'ON/OFF',inline = "5")
+////////////////SONICR////////////////////////////////
+HiLoLen = input.int(34, minval=2, title='EMA 34',group = " Sonic R")
+MLC=input.int(89,title = "EMA89",group = " Sonic R")
+signalMA = ta.ema(close, MLC)
+Ema200 = input.int(200, minval=2, title='EMA 200',group = " Sonic R")
+pacC = ta.ema(close, HiLoLen)
+pacL = ta.ema(low, HiLoLen)
+pacH = ta.ema(high, HiLoLen)
+DODGERBLUE =#66666659
+L = plot(ShowSonicR?pacL:na,color = close > pacL? color.blue:color.red, linewidth=1, title='High PAC EMA', transp=50)
+H = plot(ShowSonicR?pacH:na,color = close > pacH? color.blue:color.red, linewidth=1, title='Low PAC EMA', transp=50)
+C = plot(ShowSonicR?pacC:na,color = close > pacC? #0011ff:#ff0000, linewidth=1, title='Close PAC EMA')
+
+ema200 = ta.ema(close, Ema200)
+ema200x = plot(ShowSonicR?ema200:na, title='EMA 200', color= close > ema200? #0011ff:#ff0000, linewidth=2, style=plot.style_line)
+ema899 = plot(ShowSonicR?signalMA:na, title='EMA SIGNAL', color=close > signalMA? #0011ff80:#ff000080, linewidth=1, style=plot.style_line)
+fill(H,L,color = close>pacC?  #2195f311: #ff525211)
+
+/////////////////////////////////////////////////////////////////////
+
+////////////ShowSmartTrail//////////////
+
+
+trailType = input.string('modified', 'Trailtype', options=['modified', 'unmodified'], group = "ðŸ‘‰ SmartTrail Settings")
+ATRPeriod = input(200, 'ATR Period', group = "ðŸ‘‰ SmartTrail Settings")
+ATRFactor = input.float(5, 'ATR Factor', group = "ðŸ‘‰ SmartTrail Settings" ,minval = 2, maxval = 10, step = 0.5)
+//box_width = input.float(7, title = 'Supply/Demand Box Width', group = "ðŸ‘‰ SUPPLY AND DEMAND", minval = 1, maxval = 10, step = 0.5)
+Smoothing = input(5, 'Smoothing', group = "ðŸ‘‰ SmartTrail Settings")
+
+///////////////////////////////////
+
+norm_o = open
+norm_h = high
+norm_l = low
+norm_c = close
+//}
+
+
+
+//////// FUNCTIONS //////////////
+//{
+// Wilders ma //
+Wild_ma(_src, _malength) =>
+    _wild = 0.0
+    _wild := nz(_wild[1]) + (_src - nz(_wild[1])) / _malength
+    _wild
+
+/////////// TRUE RANGE CALCULATIONS /////////////////
+HiLo = math.min(norm_h - norm_l, 1.5 * nz(ta.sma(norm_h - norm_l, ATRPeriod)))
+HiLo2 = math.min(norm_h - norm_l, 1.5 * nz(ta.sma(norm_h - norm_l, 28)))
+HRef = norm_l <= norm_h[1] ? norm_h - norm_c[1] : norm_h - norm_c[1] - 0.5 * (norm_l - norm_h[1])
+LRef = norm_h >= norm_l[1] ? norm_c[1] - norm_l : norm_c[1] - norm_l - 0.5 * (norm_l[1] - norm_h)
+trueRange = trailType == 'modified' ? math.max(HiLo, HRef, LRef) : math.max(norm_h - norm_l, math.abs(norm_h - norm_c[1]), math.abs(norm_l - norm_c[1]))
+trueRange2 = trailType == 'modified2' ? math.max(HiLo2, HRef, LRef) : math.max(norm_h - norm_l, math.abs(norm_h - norm_c[1]), math.abs(norm_l - norm_c[1]))
+
+
+/////////// TRADE LOGIC ////////////////////////
+loss = ATRFactor * Wild_ma(trueRange, ATRPeriod)
+Up68 = norm_c - loss
+Dn68 = norm_c + loss
+TrendUp = Up68
+TrendDown = Dn68
+Trendtrade = 1
+TrendUp := norm_c[1] > TrendUp[1] ? math.max(Up68, TrendUp[1]) : Up68
+TrendDown := norm_c[1] < TrendDown[1] ? math.min(Dn68, TrendDown[1]) : Dn68
+Trendtrade := norm_c > TrendDown[1] ? 1 : norm_c < TrendUp[1] ? -1 : nz(Trendtrade[1], 1)
+trail = Trendtrade == 1 ? TrendUp : TrendDown
+ex = 0.0
+ex := ta.crossover(Trendtrade, 0) ? norm_h : ta.crossunder(Trendtrade, 0) ? norm_l : Trendtrade == 1 ? math.max(ex[1], norm_h) : Trendtrade == -1 ? math.min(ex[1], norm_l) : ex[1]
+/////////////TRADELOGIC 2///////////////////////////////////////////////
+Trendup2= close - 5 * Wild_ma(trueRange2, 28)
+Trendup2 := norm_c[1] > Trendup2[1] ? math.max((close - 5 * Wild_ma(trueRange2, 28)), Trendup2[1]) : (close - 5 * Wild_ma(trueRange2, 28))
+TrendDown2= close + 5 * Wild_ma(trueRange2, 28)
+TrendDown2 := norm_c[1] < TrendDown2[1] ? math.min((close + 5 * Wild_ma(trueRange2, 28)), TrendDown2[1]) : (close + 5 * Wild_ma(trueRange2, 28))
+Trendtrade2 = 1
+Trendtrade2 := norm_c > TrendDown2[1] ? 1 : norm_c < Trendup2[1] ? -1 : nz(Trendtrade2[1], 1)
+trail2= Trendtrade2 == 1? Trendup2 : TrendDown2
+ex2 = 0.0
+ex2 := ta.crossover(Trendtrade2, 0) ? norm_h : ta.crossunder(Trendtrade2, 0) ? norm_l : Trendtrade2 == 1 ? math.max(ex2[1], norm_h) : Trendtrade2 == -1 ? math.min(ex2[1], norm_l) : ex2[1]
+
+////// FIBONACCI LEVELS ///////////
+//{
+state = Trendtrade == 1 ? 'long' : 'short'
+state2 = Trendtrade2 ==1 ? 'long2': 'short2'
+fib1Level = 61.8
+fib2Level = 78.6
+fib3Level = 88.6
+
+
+f2 = ex + (trail - ex) * fib2Level / 100
+f3 = ex + (trail - ex) * fib3Level / 100
+
+
+f2x = ex2 + (trail2 - ex2) * fib2Level / 100
+f3x = ex2 + (trail2 - ex2) * fib3Level / 100
+
+
+fill(plot(ShowSmartTrail ? (ta.sma(trail, Smoothing)) : na, style=plot.style_line,display = display.none, editable = false, color=Trendtrade == 1 ? #004aeb : Trendtrade == -1 ? #e70f00 : na),
+ plot( ShowSmartTrail ? (ta.sma(f2, Smoothing)) : na, 'Fib 2', style=plot.style_line,editable = false,display = display.none),
+ color=state == 'long' ? color.new(#004aeb, 85) : state == 'short' ? color.new(#e70f00, 85) : na)
+fill(plot(ShowSmartTrail ? (ta.sma(trail, Smoothing)) : na, style=plot.style_line, editable = false, color=Trendtrade == 1 ? color.new(#004aeb, 0) : Trendtrade == -1 ? color.new(#e70f00, 0) : na),
+ plot( ShowSmartTrail ? (ta.sma(f3, Smoothing)) : na, 'Fib 2', style=plot.style_line,  editable = false,display = display.none),
+ color=state == 'long' ? color.new(#004aeb, 85) : state == 'short' ? color.new(#e70f00, 85) : na)
+
+
+
+fill(plot(ShowSmartTrail2 ? (ta.sma(trail2, Smoothing)) : na, style=plot.style_line,display = display.none, editable = false, color=Trendtrade2 == 1 ? color.new(#004aeb, 0) : Trendtrade2 == -1 ? color.new(#e70f00, 0) : na),
+ plot( ShowSmartTrail2 ? (ta.sma(f2x, Smoothing)) : na, 'Fib 2', style=plot.style_line,editable = false,display = display.none),
+ color=state2 == 'long2' ? color.new(#004aeb, 85) : state2 == 'short2' ? color.new(#e70f00, 85) : na)
+fill(plot(ShowSmartTrail2 ? (ta.sma(trail2, Smoothing)) : na, style=plot.style_line, editable = false, color=Trendtrade2 == 1 ? color.new(#004aeb, 0) : Trendtrade2 == -1 ? color.new(#e70f00, 0) : na),
+ plot( ShowSmartTrail2 ? (ta.sma(f3x, Smoothing)) : na, 'Fib 2', style=plot.style_line,  editable = false,display = display.none),
+ color=state2 == 'long2' ? color.new(#004aeb, 85) : state2 == 'short2' ? color.new(#e70f00, 85) : na)
+
+/////////////////////////////
+
+
+
+//////////////////////////// SUPPLY AND DEMAND/////////////////////////////////
+
+
+//      INDICATOR SETTINGS
+swing_length = input.int(7, title = 'Swing High/Low Length', group = 'ON/OFF', minval = 1, maxval = 50,inline = "6")
+history_of_demand_to_keep = input.int(30, title = 'History To Keep', minval = 5, maxval = 50)
+box_width = input.float(9, title = 'Supply/Demand Box Width', minval = 1, maxval = 10, step = 0.5)
+
+//      INDICATOR VISUAL SETTINGS
+show_zigzag = input.bool(false, title = 'Show Zig Zag', group = 'Visual Settings', inline = '1')
+show_price_action_labels = input.bool(false, title = 'ĐỈNH ĐÁY', group = 'ON/OFF', inline = '5')
+
+supply_color = input.color(#ff39394d, title = 'SELL ZONE', group = 'Visual Settings', inline = '3')
+supply_outline_color = input.color(color.new(#ffffff, 100), title = 'Outline', group = 'Visual Settings', inline = '3')
+
+demand_color = input.color(#3369ff4d, title = 'BUY ZONE', group = 'Visual Settings', inline = '4')
+demand_outline_color = input.color(color.new(#ffffff, 100), title = 'Outline', group = 'Visual Settings', inline = '4')
+
+bos_label_color = input.color(color.rgb(255, 255, 255, 100), title = 'BOS Label', group = 'Visual Settings', inline = '5')
+poi_label_color = input.color(color.rgb(255, 255, 255), title = 'POI Label', group = 'Visual Settings', inline = '7')
+
+swing_type_color = input.color(color.black, title = 'Price Action Label', group = 'Visual Settings', inline = '8')
+zigzag_color = input.color(color.new(#000000,0), title = 'Zig Zag', group = 'Visual Settings', inline = '9')
+
+//
+//END SETTINGS
+//
+
+
+//
+//FUNCTIONS
+//
+
+//      FUNCTION TO ADD NEW AND REMOVE LAST IN ARRAY
+f_array_add_pop(array, new_value_to_add) =>
+    array.unshift(array, new_value_to_add)
+    array.pop(array)
+
+//      FUNCTION SWING H & L LABELS
+f_sh_sl_labels(array, swing_type) =>
+
+    var string label_text = na
+    if swing_type == 1
+        if array.get(array, 0) >= array.get(array, 1)
+            label_text := '⩚'
+        else
+            label_text := '⩚'
+        label.new(bar_index - swing_length, array.get(array,0), text = label_text, style=label.style_label_down, textcolor = swing_type_color, color = color.new(swing_type_color, 100), size = size.tiny)
+    
+    else if swing_type == -1
+        if array.get(array, 0) >= array.get(array, 1)
+            label_text := '⩛'
+        else
+            label_text := '⩛'
+        label.new(bar_index - swing_length, array.get(array,0), text = label_text, style=label.style_label_up, textcolor = swing_type_color, color = color.new(swing_type_color, 100), size = size.tiny)
+
+//      FUNCTION MAKE SURE SUPPLY ISNT OVERLAPPING
+f_check_overlapping(new_poi, box_array, atr7) =>
+
+    atr_threshold = atr7 * 2
+    okay_to_draw = true
+
+    for i = 0 to array.size(box_array) - 1
+        top = box.get_top(array.get(box_array, i))
+        bottom = box.get_bottom(array.get(box_array, i))
+        poi = (top + bottom) / 2
+
+        upper_boundary = poi + atr_threshold
+        lower_boundary = poi - atr_threshold
+
+        if new_poi >= lower_boundary and new_poi <= upper_boundary
+            okay_to_draw := false
+            break
+        else 
+            okay_to_draw := true
+    okay_to_draw
+
+
+//      FUNCTION TO DRAW SUPPLY OR DEMAND ZONE
+f_supply_demand(value_array, bn_array, box_array, label_array, box_type, atr7) =>
+
+    atr_buffer = atr7 * (box_width / 10)
+    box_left = array.get(bn_array, 0)
+    box_right = bar_index
+
+    var float box_top = 0.00
+    var float box_bottom = 0.00
+    var float poi = 0.00
+
+
+    if box_type == 1
+        box_top := array.get(value_array, 0)
+        box_bottom := box_top - atr_buffer
+        poi := (box_top + box_bottom) / 2
+    else if box_type == -1
+        box_bottom := array.get(value_array, 0)
+        box_top := box_bottom + atr_buffer
+        poi := (box_top + box_bottom) / 2
+
+    okay_to_draw = f_check_overlapping(poi, box_array, atr7)
+    // okay_to_draw = true
+
+    //delete oldest box, and then create a new box and add it to the array
+    if box_type == 1 and okay_to_draw
+        box.delete( array.get(box_array, array.size(box_array) - 1) )
+        f_array_add_pop(box_array, box.new( left = box_left, top = box_top, right = box_right, bottom = box_bottom, border_color = supply_outline_color,
+             bgcolor = ShowSR?supply_color:na, extend = extend.right, text = 'SELL ZONE', text_halign = text.align_center, text_valign = text.align_center, text_color = ShowSR?poi_label_color:na, text_size = size.small, xloc = xloc.bar_index))
+        
+        box.delete( array.get(label_array, array.size(label_array) - 1) )
+        f_array_add_pop(label_array, box.new( left = box_left, top = poi, right = box_right, bottom = poi, border_color = ShowSR?color.new(poi_label_color,90):na,
+             bgcolor = ShowSR?color.new(poi_label_color,90):na, extend = extend.right, text_halign = text.align_left, text_valign = text.align_center, text_color = ShowSR?poi_label_color:na, text_size = size.small, xloc = xloc.bar_index))
+
+    else if box_type == -1 and okay_to_draw
+        box.delete( array.get(box_array, array.size(box_array) - 1) )
+        f_array_add_pop(box_array, box.new( left = box_left, top = box_top, right = box_right, bottom = box_bottom, border_color = demand_outline_color,
+             bgcolor = ShowSR?demand_color:na, extend = extend.right,  text = 'BUY ZONE', text_halign = text.align_center, text_valign = text.align_center, text_color = ShowSR?poi_label_color:na, text_size = size.small, xloc = xloc.bar_index))
+        
+        box.delete( array.get(label_array, array.size(label_array) - 1) )
+        f_array_add_pop(label_array, box.new( left = box_left, top = poi, right = box_right, bottom = poi, border_color = ShowSR?color.new(poi_label_color,90):na,
+             bgcolor = ShowSR?color.new(poi_label_color,90):na, extend = extend.right, text_halign = text.align_left, text_valign = text.align_center, text_color = ShowSR?poi_label_color:na, text_size = size.small, xloc = xloc.bar_index))
+
+
+//      FUNCTION TO CHANGE SUPPLY/DEMAND TO A BOS IF BROKEN
+f_sd_to_bos(box_array, bos_array, label_array, zone_type) =>
+
+    if zone_type == 1
+        for i = 0 to array.size(box_array) - 1
+            level_to_break = box.get_top(array.get(box_array,i))
+            // if ta.crossover(close, level_to_break)
+            if close >= level_to_break
+                copied_box = box.copy(array.get(box_array,i))
+                f_array_add_pop(bos_array, copied_box)
+                mid = (box.get_top(array.get(box_array,i)) + box.get_bottom(array.get(box_array,i))) / 2
+                box.set_top(array.get(bos_array,0), mid)
+                box.set_bottom(array.get(bos_array,0), mid)
+                box.set_extend( array.get(bos_array,0), extend.none)
+                box.set_right( array.get(bos_array,0), bar_index)
+                box.set_text( array.get(bos_array,0), 'BOS' )
+                box.set_text_color( array.get(bos_array,0), bos_label_color)
+                box.set_text_size( array.get(bos_array,0), size.small)
+                box.set_text_halign( array.get(bos_array,0), text.align_center)
+                box.set_text_valign( array.get(bos_array,0), text.align_center)
+                box.delete(array.get(box_array, i))
+                box.delete(array.get(label_array, i))
+
+
+    if zone_type == -1
+        for i = 0 to array.size(box_array) - 1
+            level_to_break = box.get_bottom(array.get(box_array,i))
+            // if ta.crossunder(close, level_to_break)
+            if close <= level_to_break
+                copied_box = box.copy(array.get(box_array,i))
+                f_array_add_pop(bos_array, copied_box)
+                mid = (box.get_top(array.get(box_array,i)) + box.get_bottom(array.get(box_array,i))) / 2
+                box.set_top(array.get(bos_array,0), mid)
+                box.set_bottom(array.get(bos_array,0), mid)
+                box.set_extend( array.get(bos_array,0), extend.none)
+                box.set_right( array.get(bos_array,0), bar_index)
+                box.set_text( array.get(bos_array,0), 'BOS' )
+                box.set_text_color( array.get(bos_array,0), bos_label_color)
+                box.set_text_size( array.get(bos_array,0), size.small)
+                box.set_text_halign( array.get(bos_array,0), text.align_center)
+                box.set_text_valign( array.get(bos_array,0), text.align_center)
+                box.delete(array.get(box_array, i))
+                box.delete(array.get(label_array, i))
+
+
+
+//      FUNCTION MANAGE CURRENT BOXES BY CHANGING ENDPOINT
+f_extend_box_endpoint(box_array) =>
+
+    for i = 0 to array.size(box_array) - 1
+        box.set_right(array.get(box_array, i), bar_index + 100)
+
+
+//
+//END FUNCTIONS
+//  
+
+
+//
+//CALCULATIONS
+//
+
+//      CALCULATE ATR 
+atr7 = ta.atr(50)
+
+//      CALCULATE SWING HIGHS & SWING LOWS
+swing_high = ta.pivothigh(high, swing_length, swing_length)
+swing_low = ta.pivotlow(low, swing_length, swing_length)
+
+//      ARRAYS FOR SWING H/L & BN 
+var swing_high_values = array.new_float(5,0.00)
+var swing_low_values = array.new_float(5,0.00)
+
+var swing_high_bns = array.new_int(5,0)
+var swing_low_bns = array.new_int(5,0)
+
+//      ARRAYS FOR SUPPLY / DEMAND
+var current_supply_box = array.new_box(history_of_demand_to_keep, na)
+var current_demand_box = array.new_box(history_of_demand_to_keep, na)
+
+//      ARRAYS FOR SUPPLY / DEMAND POI LABELS
+var current_supply_poi = array.new_box(history_of_demand_to_keep, na)
+var current_demand_poi = array.new_box(history_of_demand_to_keep, na)
+
+//      ARRAYS FOR BOS
+var supply_bos = array.new_box(5, na)
+var demand_bos = array.new_box(5, na)
+//
+//END CALCULATIONS
+//
+
+//      NEW SWING HIGH
+if not na(swing_high)
+
+    //MANAGE SWING HIGH VALUES
+    f_array_add_pop(swing_high_values, swing_high)
+    f_array_add_pop(swing_high_bns, bar_index[swing_length])
+    if show_price_action_labels
+        f_sh_sl_labels(swing_high_values, 1)
+
+    f_supply_demand(swing_high_values, swing_high_bns, current_supply_box, current_supply_poi, 1, atr7)
+
+//      NEW SWING LOW
+else if not na(swing_low)
+
+    //MANAGE SWING LOW VALUES
+    f_array_add_pop(swing_low_values, swing_low)
+    f_array_add_pop(swing_low_bns, bar_index[swing_length])
+    if show_price_action_labels
+        f_sh_sl_labels(swing_low_values, -1)
+    
+    f_supply_demand(swing_low_values, swing_low_bns, current_demand_box, current_demand_poi, -1, atr7)
+
+
+f_sd_to_bos(current_supply_box, supply_bos, current_supply_poi, 1)
+f_sd_to_bos(current_demand_box, demand_bos, current_demand_poi, -1)
+
+f_extend_box_endpoint(current_supply_box)
+f_extend_box_endpoint(current_demand_box)
+
+////////////////////////////////////////////////////////////////////////
+maulen=input.color(#1c6cff,group = "ema signal")
+mauxuong=input.color(color.rgb(255, 0, 0),group = "ema signal")
+maulen1=input.color(#1c6cff39,group = "ema signal")
+mauxuong1=input.color(#ff000039,group = "ema signal")
+ema5=plot(TINHIEU?ta.ema(close,13):na,color = ta.ema(close,13)>ta.ema(close,20)? maulen:mauxuong,linewidth = 2)
+ema13=plot(TINHIEU?ta.ema(close,20):na,color = ta.ema(close,13)>ta.ema(close,20)? maulen:mauxuong,linewidth = 1)
+fill(ema5,ema13,color = ta.ema(close,10)>ta.ema(close,20)?maulen1:mauxuong1)
+//plotchar(ta.crossover(ta.ema(close,5),ta.ema(close,13)),char = "◉",color = #0004ff,location = location.belowbar,size = size.tiny)
+//plotchar(ta.crossunder(ta.ema(close,5),ta.ema(close,13)),char = "◉",color = #000000,location = location.abovebar,size = size.tiny)
+
+//////////I CHI MÒ CUA/////////////////////
+donchian(len) => math.avg(ta.lowest(len), ta.highest(len))
+conversionLine = donchian(9)
+baseLine = donchian(26)
+leadLine1 = math.avg(conversionLine, baseLine)
+leadLine2 = donchian(52)
+p1 = plot(Ichimocua? leadLine1:na, offset = 26 - 1, color = leadLine1 > leadLine2 ? #ffffff80 : #00000080,
+	 title="Leading Span A")
+p2 = plot(Ichimocua?leadLine2:na, offset = 26 - 1, color = leadLine1 > leadLine2 ? #ffffff50 : #00000050,
+	 title="Leading Span B")
+plot(leadLine1 > leadLine2 ? leadLine1 : leadLine2, offset = 26 - 1, title = "Kumo Cloud Upper Line", display = display.none) 
+plot(leadLine1 < leadLine2 ? leadLine1 : leadLine2, offset = 26 - 1, title = "Kumo Cloud Lower Line", display = display.none) 
+fill( p1, p2, color = leadLine1 > leadLine2 ? #ffffff2c : #0000001a)
+
+
+
+/////////////////SIGNALLLLLLLLLLL////////////////////////
+//BUY//
+DKB1 = close > leadLine1[26] and close > leadLine2[26]
+DKB2 = ta.ema(close,89) > ta.ema(close,200) and ta.ema(close,50) > ta.ema(close,100)
+//DKB3 = (hist > 0)
+BUY1 = ta.crossover(ta.ema(close,13),pacH)
+BUY2 = (ta.cross(close,pacH) and (close>high[1]))
+//SELL//
+DKS1 = close <leadLine1[26] and close < leadLine2[26]
+DKS2 = ta.ema(close,89) < ta.ema(close,200) and ta.ema(close,50) < ta.ema(close,100)
+//DKS3 = (hist < 0)
+SELL1 = ta.crossunder(ta.ema(close,13),pacL)
+SELL2 = ta.cross(close,pacL) and (close<low[1])
+/////
+
+//PLOT SIGNAL/////////////
+Buy= DKB1 and DKB2 and BUY2 //and DKB3
+Sell= DKS1 and DKS2 and SELL2 //and DKS3
+Buyplust =  ((close[2]<pacH)and(close[1]>pacH)and(close[1]<high[2])and (close>high[2])and(close>high[1])) and DKB1 and DKB2 //and DKB3
+Sellplust= ((close[2]>pacL)and(close[1]<pacL)and(close[1]>low[2])and (close<low[2])and(close<low[1])) and DKS1 and DKS2 //and DKS3
+plotshape(TINHIEU?Buy:na, "BUY SIGNAL", shape.labelup,location = location.belowbar, color = #2148f3c2,text = "BUY ", textcolor = #ffffff,size = size.tiny)
+plotshape(TINHIEU?Sell:na, "SELL SIGNAL", shape.labeldown,location = location.abovebar, color = #ff000091,text = "SELL", textcolor = #ffffff,size = size.tiny)
+plotshape(TINHIEU?Buyplust:na, "BUY SIGNAL", shape.labelup,location = location.belowbar, color = #2148f3c2,text = "BUY +", textcolor = #ffffff,size = size.tiny)
+plotshape(TINHIEU?Sellplust:na, "SELL SIGNAL", shape.labeldown,location = location.abovebar, color = #ff000091,text = "SELL +", textcolor = #ffffff,size = size.tiny)
+////
+BAI=Buy or Buyplust
+SEO=Sell or Sellplust
+Triggerarlert(_ticker)=>
+    BAIx=request.security(_ticker,timeframe.period,BAI)
+    SEOX=request.security(_ticker,timeframe.period,SEO)
+    if BAIx
+        alert('🔵  '+ _ticker+"  Hưng đẹp zai vào canh BAI 📈")
+    if SEOX
+        alert('🔴  '+ _ticker+"  Hưng đẹp zai vào canh SEO 📉")
+Triggerarlert("MEXC:BTCUSDT")
+Triggerarlert("MEXC:ETHUSDT")
+Triggerarlert("MEXC:BNBUSDT")
+Triggerarlert("MEXC:SOLUSDT")
+Triggerarlert("MEXC:NOTUSDT")
+Triggerarlert("MEXC:FLOKIUSDT")
+Triggerarlert("MEXC:HIGHUSDT")
+Triggerarlert("MEXC:LINKUSDT")
+Triggerarlert("MEXC:TURBOUSDT")
+Triggerarlert("MEXC:TRBUSDT.P")
+Triggerarlert("MEXC:ARBUSDT")
+Triggerarlert("MEXC:PEOPLEUSDT")
+Triggerarlert("MEXC:KEYUSDT.P")
+Triggerarlert("MEXC:BBUSDT.P")
+//{ Stop loss
+
+//input
+
+atrPeriod = input(10, "ATR Length", group="Stop loss")
+multiplier = input.float(2.618, "Multiplier", step = 0.1, group="Stop loss")
+lastBar = input(title="Values to show", defval=4, group="Stop loss")
+
+//calc
+atr = ta.atr(atrPeriod)
+up = hl2 - multiplier * atr
+dn = hl2 + multiplier * atr
+
+//plot stop loss for long
+
+plot(showStop ? up : na, title="Stop loss for long", style=plot.style_linebr, linewidth=1, color = color.gray, show_last = lastBar)
+plot(showStop ? up : na, title="Stop loss for long", style=plot.style_circles, linewidth=2, color =color.gray, show_last = lastBar)
+//plot stop loss for short
+plot(showStop ? dn : na, title="Stop loss for short", style=plot.style_linebr, linewidth=1, color =color.gray, show_last = lastBar)
+plot(showStop ? dn : na, title="Stop loss for short", style=plot.style_circles, linewidth=2, color=color.gray, show_last = lastBar)
+
+
+//PLOT TIỀN VÀO LỆNH
+dienthoai = (enchi*(Taikhoan*(ruiro/100)/math.abs(enchi-etlo)))
+maytinh = dienthoai/donbay
+R= Taikhoan*(ruiro/100)
+
+
+if DB
+    var myTable = table.new(position = position.bottom_right, columns = 3, rows = 2, frame_color = #1d1d1d, frame_width = 1, border_color = #2c2c2c, border_width = 1)
+    table.cell(myTable, 0, 1,str.tostring(dienthoai) + " $",text_color = #c7c7c7, bgcolor=color.rgb(0, 0, 0, 100))
+    table.cell(myTable, 1, 1,str.tostring(maytinh) + " $",text_color = #c7c7c7, bgcolor=color.rgb(0, 0, 0, 100))
+    table.cell(myTable, 2, 1,str.tostring(R) + " $",text_color = #c7c7c7, bgcolor=color.rgb(0, 0, 0, 100))
+
+    table.cell(myTable, 0, 0,"Giá trị",text_color = #c7c7c7, bgcolor=color.rgb(0, 0, 0, 100))
+    table.cell(myTable, 1, 0, "Chi phí",text_color = #c7c7c7, bgcolor=color.rgb(0, 0, 0, 100))
+    table.cell(myTable, 2, 0,"R",text_color = #c7c7c7, bgcolor=color.rgb(0, 0, 0, 100))
+
+//TREND CLOUD /////////////////////
+
+// Inputs
+
+string TrendMode = input.string("Tight", "Trend Mode", options = ["Tight", "Normal", "Loose", "FOMC", "Net"], group = "👉 Trend Cloud", tooltip = "There are several trend modes available. The mods are lined up based on the aggressiveness of the ATR. Tight & Normal modes are the going to flip way much often whereas the Loose or FOMC will provide much higher wiggle room. The good rule of thumb to use is to just stick with first two modes when trading less volatile sessions or ranges, and use the other two on fast moving expanding environments. The Net mode provides the combination of all modes in one giant net. Some might prefer this mode since it suits well to the scale in scale out methods. ")
+string HTFMode = input.string("Auto", "HTF Mode", options = ["Auto", "Manual"], group = "👉 Trend Cloud", tooltip = "Changes the higher time frame mode. The HTF mode set to auto will automatically change the HTF Trend System time frame for you. The auto mode is choosing the most suitable time frames based on the pre-defined time frame pairs that are the most suitable ones. If you prefer your own time frame choose the manual mode.")
+TimeFrameM = input.timeframe('60', "HTF Aggregation", options = ['1','2','3','5','10','15','20','30','45','60','120','180','240','D','2D','3D','4D','W','2W','3W','M','2M','3M'], group = "👉 Trend Cloud", tooltip = "Set the manual time frame for the HTF Trend System.")
+
+
+ShowTrend = input(defval=false, title="Show Trend Line", group = "Trend Line", tooltip = "Trend Line is the first part of the L&L Trend System. The trend line is nothing simplier than the 13 exponential moving average. The color of the Trend Line depends on the position of multiple exponential averages and whether they are stacked on top of each other or not.")
+TrendBullish = #27c22e
+TrendBearish = #ff0000
+TrendNeutral = #434651
+
+ShowTrend2 = input(defval=false, title="Show HTF Trend Line", group = "Higher Time Frame Trend Line", tooltip = "Higher Time Frame Trend Line.")
+TrendBullish2 = #27c22e
+TrendBearish2 = #ff0000
+TrendNeutral2 = #434651
+
+ShowCloud = input(defval=true, title="Show Cloud", group = "Trend Cloud", tooltip = "Cloud will paint the area behind the Trend Line and Stop Line with custom color.")
+CloudBearish = input(#ff00006e, title="Bullish", group = "Trend Cloud")
+CloudBullish = input(#0044ff45, title="Bearish", group = "Trend Cloud")
+ShowHTFCloud = input(defval=true, title="Show HTF Cloud", group = "Higher Time Frame Trend Cloud", tooltip = "Higher Time Frame Cloud.")
+CloudBearish2 = input(#ff00006e, title="Bullish", group = "Higher Time Frame Trend Cloud")
+CloudBullish2 = input(#0044ff45, title="Bearish", group = "Higher Time Frame Trend Cloud")
+
+
+// Trend System (First Time Frame)
+
+ema8 =  ta.vwma(close, 8)
+ema13x = ta.vwma(close, 13)
+ema21 = ta.vwma(close, 21)
+ema34 = ta.vwma(close, 34)
+emaup = ema8 > ema13x  and ema13x > ema21 and ema21 > ema34
+emadn = ema8 < ema13x  and ema13x < ema21 and ema21 < ema34
+
+Trend = ta.ema(close, 13)
+TrendColor = ShowTrend and emadn and close <= Trend ? TrendBearish : ShowTrend and emaup and close >= Trend ? TrendBullish  : ShowTrend ? TrendNeutral : na
+plot(Trend, title="EMA 13", color=TrendColor)
+//plot(Trend,title = "Trend", color = TrendColor, linewidth = 2, editable = false)
+
+ATRLength = if TrendMode == "Tight"
+    60
+else if TrendMode == "Normal"
+    80
+else if TrendMode == "Loose"
+    100
+else if TrendMode == "FOMC"
+    120
+else if TrendMode == "Net"
+    140
+
+ATR = (ATRLength/100) * ta.ema(ta.tr(true),8)
+Up = close > (Trend + ATR)
+Down = close < (Trend - ATR)
+var T = 0.0
+T := Up ? 1 : Down ? -1 : T[1]
+// Higher Time Frame Aggregations
+
+TimeFrameA =
+      timeframe.period == '1' ? '5' : 
+      timeframe.period == '2' ? '5' :
+      timeframe.period == '3' ? '5' : 
+      timeframe.period == '4' ? '5' : 
+      timeframe.period == '5' ? '30' : 
+      timeframe.period == '10' ? '30' : 
+      timeframe.period == '15' ? '30' : 
+      timeframe.period == '30' ? '240' : 
+      timeframe.period == '60' ? '240' : 
+      timeframe.period == '120' ? '240' : 
+      timeframe.period == '180' ? 'D' : 
+      timeframe.period == '240' ? 'D' : 
+      timeframe.period == 'D' ? 'W' :
+      timeframe.period == 'W' ? 'M' : 
+      timeframe.period == 'M' ? '3M' : timeframe.period 
+
+TimeFrame = if HTFMode == "Auto"
+    TimeFrameA
+
+else if HTFMode == "Manual"
+    TimeFrameM
+
+// Trend System (Second Time Frame)
+
+ema82 =  request.security(syminfo.tickerid, TimeFrame, ta.vwma(close, 8))
+ema132 = request.security(syminfo.tickerid, TimeFrame, ta.vwma(close, 13))
+ema212 = request.security(syminfo.tickerid, TimeFrame, ta.vwma(close, 21))
+ema342 = request.security(syminfo.tickerid, TimeFrame, ta.vwma(close, 34))
+emaup2 = ema82 > ema132  and ema132 > ema212 and ema212 > ema342
+emadn2 = ema82 < ema132  and ema132 < ema212 and ema212 < ema342
+
+Trend2 = request.security(syminfo.tickerid, TimeFrame, ta.ema(close, 13))
+TrendColor2 = ShowTrend2 and emadn2 and request.security(syminfo.tickerid, TimeFrame, close) <= Trend2 ? TrendBearish2 : ShowTrend2 and emaup2 and request.security(syminfo.tickerid, TimeFrame, close) >= Trend2 ? TrendBullish2 : ShowTrend2 ? TrendNeutral2 : na
+plot(Trend2, title = "Trend2", color = TrendColor2, linewidth = 2, editable = false)
+
+ATRLength2 = if TrendMode == "Tight"
+    60
+else if TrendMode == "Normal"
+    80
+else if TrendMode == "Loose"
+    100
+else if TrendMode == "FOMC"
+    120
+else if TrendMode == "Net"
+    140
+
+ATR2 = (ATRLength2/100) * request.security(syminfo.tickerid, TimeFrame, ta.ema(ta.tr(true),8))
+Up2 = request.security(syminfo.tickerid, TimeFrame, close) > (Trend2 + ATR2)
+Down2 = request.security(syminfo.tickerid, TimeFrame, close) < (Trend2 - ATR2)
+var T2 = 0.0
+T2 := Up2 ? 1 : Down2 ? -1 : T2[1]
+
+// Trend Clouds
+
+p1x = plot(ShowSmartNLN?Trend:na, title = "Trend Line", color = TrendColor, linewidth = 2, display = display.none, editable = false)
+p2x = plot(ShowSmartNLN?(T == 1  ? (Trend-ATR) : T == -1  ? (Trend+ATR) : T[1]):na,title ="StopLine ", linewidth = 2, display = display.none, editable = false)
+Cloud = ShowCloud and T == 1 ? CloudBullish : ShowCloud ? CloudBearish : na
+fill(p1x,p2x,title="TrendCloud",color = Cloud, editable = false)
+p3 = plot(ShowSmartNLN?Trend2:na, title = "Trend Line 2", color = TrendColor2, linewidth = 2, display = display.none, editable = false)
+p4 = plot(ShowSmartNLN?(T2 == 1  ? (Trend2-ATR2) : T2 == -1  ? (Trend2+ATR2) : T2[1]):na,title ="StopLine 2", linewidth = 2, display = display.none, editable = false)
+Cloud2 = ShowHTFCloud and T2 == 1 ? CloudBullish2 : ShowHTFCloud ? CloudBearish2 : na
+fill(p3,p4,title="TrendCloud2",color = Cloud2, editable = false)
