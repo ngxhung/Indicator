@@ -1,0 +1,278 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// @BigBeluga
+
+//@version=5
+indicator("Market Structure Trailing Stop [BigBeluga]", "MS TrailingStop [BigBeluga]",
+         overlay          = true,
+         max_lines_count  = 500,
+         max_labels_count = 500)
+
+// ＩＮＰＵＴＳ ========================================================================================================{
+//@variable: Number of bars to the left and right for pivot calculations
+int leftBars  = input(8, "Highs & Lows")
+int rightBars = leftBars  // Right bars equal to left bars for symmetry
+
+//@variable: Boolean to toggle the use of trailing stops
+bool use_ts          = input.bool(false, "", inline = "1")
+//@variable: Length for trailing stop calculations
+int trail_len        = input.int(25, "Trailing Stop", inline = "1")
+//@variable: Volume threshold for certain conditions
+int volume_threshold = input.int(500, "Volume 𝄛", inline = "1", tooltip = "Filter TrailingStop by Volume Size")
+
+//@variable: Boolean to toggle the use of Break of Structure (BoS) labels
+bool use_bos         = input.bool(false, "BoS", tooltip = "Show Break of Structure", inline = "2")
+//@variable: Boolean to toggle the use of Liquidity Sweep (X) labels
+bool sweep_x         = input.bool(false, "Liquidity Sweep (X)", tooltip = "if BoS Displayed Show Liquidity Sweeps (X)", 
+                                                                                     inline = "2")
+
+//@variable: Boolean to toggle the market trend coloring
+bool trend_col       = input.bool(false, "Market Trend")
+
+//@variable: Colors for up and down trends
+color up = #1fc0b0  // Uptrend color
+color dn = #d11c43  // Downtrend color
+
+// Calculate pivot highs and lows based on the input periods
+ph = ta.pivothigh(leftBars, rightBars)
+pl = ta.pivotlow(leftBars, rightBars)
+
+//@variable: Variables to store upper and lower line objects
+var upper_line = line(na)
+var lower_line = line(na)
+
+
+//@variable: Counters for tracking structure changes
+var int count1 = 0
+var int count2 = 0
+var int n1     = 0  // Bar index of the last upper pivot
+var int n2     = 0  // Bar index of the last lower pivot
+var int count_trend1 = 0  // Counter for uptrend
+var int count_trend2 = 0  // Counter for downtrend
+
+//@variable: Arrays to store volume data for the pivot structures
+var volume_1 = array.new<float>()
+var volume_2 = array.new<float>()
+
+// }
+
+// ＣＡＬＣＵＬＡＴＩＯＮＳ ============================================================================================={
+// Pivots Lines
+if not na(ph)
+    upper_line := line.new(bar_index[rightBars], high[rightBars], bar_index[rightBars], high[rightBars], 
+                             force_overlay = true)
+    n1 := bar_index[rightBars]  // Store the bar index of the last upper pivot
+
+if not na(pl)
+    lower_line := line.new(bar_index[rightBars], low[rightBars], bar_index[rightBars], low[rightBars], 
+                             force_overlay = true)
+    n2 := bar_index[rightBars]  // Store the bar index of the last lower pivot
+
+// -------------------------------------------------------------
+// Market structure logic for upper pivots
+if high > upper_line.get_y1() and low < upper_line.get_y1()
+    count1 += 1  // Increment uptrend structure counter
+    count2 := 0  // Reset downtrend structure counter
+
+    line.set_color(upper_line[1], up)  // Set upper line color to uptrend color
+    line.set_style(upper_line[1], line.style_dashed)  // Set upper line style to dashed
+    line.set_x2(upper_line[1], bar_index)  // Extend the line to the current bar
+
+    // If this is the first time this structure is identified
+    if count1 == 1
+        volume_1.clear()  // Clear the volume array for this structure
+        for i = 0 to (bar_index - n1) 
+            volume_1.push((close[i] > open[i] ? volume[i] : -volume[i]))  // Add volume data
+
+        line.set_style(upper_line[1], line.style_solid)  // Set upper line style to solid
+
+        // Create a label showing the volume and structure change (CHoCh)
+        label.new(n1, line.get_y1(upper_line[1]), 
+                     str.tostring(volume_1.sum(), format.volume) + "\nCHoCh", 
+                     color          = color(na), 
+                     style          = label.style_label_down, 
+                     textcolor      = chart.fg_color)
+
+    // If this structure has been identified more than once and BoS is enabled
+    if count1 > 1 and use_bos
+        index = bar_index - (bar_index - n1) / 2  // Calculate the midpoint for placing the label
+        volume_1.clear()
+        for i = 0 to (bar_index - n1) 
+            volume_1.push((close[i] > open[i] ? volume[i] : -volume[i]))
+
+        line.set_style(upper_line[1], line.style_solid)
+
+        // Create a label showing the volume and Break of Structure (BoS)
+        lbl1 = label.new(index, line.get_y1(upper_line[1]), 
+                     str.tostring(volume_1.sum(), format.volume) + "\nBoS", 
+                     color          = color(na), 
+                     style          = label.style_label_down, 
+                     textcolor      = up, 
+                     size           = size.small,
+                     force_overlay  = true)
+
+        // If there is a liquidity sweep (X), delete the BoS label and replace with X label
+        if close < open and high > upper_line.get_y1() and open < upper_line.get_y1() and sweep_x
+            lbl1.delete()
+            label.new(index, line.get_y1(upper_line[1]), 
+                     str.tostring(volume_1.sum(), format.volume) + "\n✖", 
+                     color = color(na), 
+                     style = label.style_label_down, 
+                     textcolor = up, 
+                     force_overlay = true)
+
+    upper_line := line(na)  // Reset the upper line to na
+
+// -------------------------------------------------------------
+// Market structure logic for lower pivots
+if high > lower_line.get_y1() and low < lower_line.get_y1()
+    count2 += 1  // Increment downtrend structure counter
+    count1 := 0  // Reset uptrend structure counter
+    
+    line.set_color(lower_line[1], dn)  // Set lower line color to downtrend color
+    line.set_style(lower_line[1], line.style_dashed)  // Set lower line style to dashed
+    line.set_x2   (lower_line[1], bar_index)  // Extend the line to the current bar
+
+    // If this is the first time this structure is identified
+    if count2 == 1
+        volume_2.clear()  // Clear the volume array for this structure
+        for i = 0 to (bar_index - n2) 
+            volume_2.push((close[i] > open[i] ? volume[i] : -volume[i]))  // Add volume data, positive for up candles, negative for down candles
+
+        line.set_style(lower_line[1], line.style_solid)  // Set lower line style to solid
+
+        // Create a label showing the volume and structure change (CHoCh)
+        label.new(n2, line.get_y1(lower_line[1]), 
+                     "CHoCh\n" + str.tostring(volume_2.sum(), format.volume), 
+                     color          = color(na), 
+                     style          = label.style_label_up, 
+                     textcolor      = chart.fg_color)
+
+    // If this structure has been identified more than once and BoS is enabled
+    if count2 > 1 and use_bos
+        index = bar_index - (bar_index - n2) / 2  // Calculate the midpoint for placing the label
+        volume_2.clear()
+        for i = 0 to (bar_index - n2) 
+            volume_2.push((close[i] > open[i] ? volume[i] : -volume[i]))
+
+        line.set_style(lower_line[1], line.style_solid)
+
+        // Create a label showing the volume and Break of Structure (BoS)
+        lbl2 = label.new(index, line.get_y1(lower_line[1]), 
+                     "BoS\n" + str.tostring(volume_2.sum(), format.volume), 
+                     color          = color(na), 
+                     style          = label.style_label_up, 
+                     textcolor      = dn, 
+                     size           = size.small,
+                     force_overlay  = true)
+
+        // If there is a liquidity sweep (X), delete the BoS label and replace with X label
+        if close < open and low < lower_line.get_y1() and close > lower_line.get_y1() and sweep_x
+            lbl2.delete()
+            label.new(index, line.get_y1(lower_line[1]), 
+                     "✖\n"+ str.tostring(volume_2.sum(), format.volume),
+                     color          = color(na), 
+                     style          = label.style_label_up, 
+                     textcolor      = dn, 
+                     force_overlay  = true)
+
+    lower_line := line(na)  // Reset the lower line to na
+
+// Update trend counters based on the current market structure
+if count1 > 0 
+    count_trend2 := 0  // Reset the downtrend counter
+    count_trend1 += 1  // Increment the uptrend counter
+
+if count2 > 0 
+    count_trend1 := 0  // Reset the uptrend counter
+    count_trend2 += 1  // Increment the downtrend counter
+
+// Calculate highest and lowest for trailing stop logic
+H   = ta.highest(trail_len) 
+L   = ta.lowest(trail_len)
+
+// Logic to set the trailing stop band based on trend conditions and volume
+band = count_trend1 > 0 
+         and L[1] <= L and L[2] <= L[1] and L[3] <= L[2] and L[4] <= L[3] and L[5] <= L[4]
+         and volume_1.sum() > volume_threshold and use_ts
+         ? L  
+         : count_trend2 > 0 
+         and H[1] >= H and H[2] >= H[1] and H[3] >= H[2] and H[4] >= H[3] and H[5] >= H[4]  
+         and volume_2.sum() < -volume_threshold and use_ts
+         ? H 
+         : na
+
+
+// }
+
+// ＰＬＯＴ============================================================================================================={
+
+// Plot Signals
+if use_ts
+    if ta.crossover(close, band) or close > band and na(band[1]) and not na(band)
+        label.new(bar_index, band, 
+                 "B",
+                 color = color.new(color.lime, 50),
+                 style = label.style_label_up, 
+                 textcolor = chart.fg_color,
+                 size = size.tiny, force_overlay = true)
+
+
+    if ta.crossunder(close, band) or close < band and na(band[1]) and not na(band)
+        label.new(bar_index, band, 
+                 "S",
+                 color = color.new(#df1e1e, 50),
+                 style = label.style_label_down, 
+                 textcolor = chart.fg_color,
+                 size = size.tiny, force_overlay = true)
+
+
+// Plot the trailing stop band with a color based on the trend direction
+plot(ta.cross(close, band) ? na : band, 
+         style         = plot.style_linebr, 
+         color         = close > band ? color.new(up, 20) : color.new(dn, 20), 
+         force_overlay = true)
+
+plot(ta.cross(close, band) ? na : band, 
+         style         = plot.style_linebr, 
+         color         = close > band ? color.new(up, 80) : color.new(dn, 80), 
+         linewidth     = 5,
+         force_overlay = true)
+
+// Plot circles at the pivot points
+plotshape(not na(ph) ? high[rightBars] : na, "", 
+         shape.circle,
+         location.absolute, 
+         offset         = -rightBars, 
+         color          = up, 
+         force_overlay  = true)
+
+plotshape(not na(pl) ? low[rightBars] : na, "", 
+         shape.circle, 
+         location.absolute, 
+         offset         = -rightBars, 
+         color          = dn, 
+         force_overlay  = true)
+
+// Plot tiny circles at the pivot points with semi-transparent color
+plotshape(not na(ph) ? high[rightBars] : na, "", 
+         shape.circle, 
+         location.absolute, 
+         offset = -rightBars, 
+         color  = color.new(up, 50), 
+         size   = size.tiny, force_overlay = true)
+
+plotshape(not na(pl) ? low[rightBars] : na, "", 
+         shape.circle, 
+         location.absolute, 
+         offset = -rightBars, 
+         color  = color.new(dn, 50), 
+         size   = size.tiny, force_overlay = true)
+
+// Apply market trend coloring to candles if the trend color option is enabled
+color_trend = trend_col ? (count_trend1 > 0 ? up : count_trend2 > 0 ? dn : na) : na
+
+plotcandle(open, high, low, close, title='Candle Trend', 
+             color       = color_trend, 
+             wickcolor   = color_trend, 
+             bordercolor = color_trend)
+// }
