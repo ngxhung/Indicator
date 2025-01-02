@@ -1,0 +1,79 @@
+//@version=5
+strategy("Bollinger Bands Trading Strategy", overlay=true, initial_capital=10000, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+
+// Bollinger Bands Parameters
+length = 20
+src = close
+mult = 2.0
+
+// Tính toán Bollinger Bands
+basis = ta.sma(src, length)
+dev = mult * ta.stdev(src, length)
+upper = basis + dev
+lower = basis - dev
+
+// Biến xác định nến tín hiệu và nến xác nhận
+var bool buySignal = false
+var bool sellSignal = false
+var bool buyConfirm = false
+var bool sellConfirm = false
+
+// Điều kiện nến tín hiệu BUY
+buySignalCondition = close < low[1] and close < lower
+
+// Điều kiện nến tín hiệu SELL
+sellSignalCondition = close > high[1] and close > upper
+
+// Điều kiện xác nhận BUY
+buyConfirmCondition = close > high[1]
+
+// Điều kiện xác nhận SELL
+sellConfirmCondition = close < low[1]
+
+// Cập nhật trạng thái tín hiệu
+if (buySignalCondition)
+    buySignal := true
+    buyConfirm := false
+    sellSignal := false
+    sellConfirm := false
+
+if (sellSignalCondition)
+    sellSignal := true
+    sellConfirm := false
+    buySignal := false
+    buyConfirm := false
+
+// Xác nhận BUY
+if (buySignal and buyConfirmCondition)
+    buyConfirm := true
+
+// Xác nhận SELL
+if (sellSignal and sellConfirmCondition)
+    sellConfirm := true
+
+// Tính toán Stop Loss và Take Profit
+var float buyStopLoss = na
+var float sellStopLoss = na
+
+if (buySignal)
+    buyStopLoss := ta.lowest(low, 10)  // Tìm mức thấp nhất của 20 nến gần nhất
+
+if (sellSignal)
+    sellStopLoss := ta.highest(high, 10)  // Tìm mức cao nhất của 20 nến gần nhất
+
+buyTakeProfit = strategy.position_avg_price + 3 * (strategy.position_avg_price - buyStopLoss)
+sellTakeProfit = strategy.position_avg_price - 3 * (sellStopLoss - strategy.position_avg_price)
+
+// Entry và Exit Strategy
+if (buySignal and buyConfirm)
+    strategy.entry("Buy", strategy.long)
+    strategy.exit("BuyExit", "Buy", stop=buyStopLoss, limit=buyTakeProfit)
+
+if (sellSignal and sellConfirm)
+    strategy.entry("Sell", strategy.short)
+    strategy.exit("SellExit", "Sell", stop=sellStopLoss, limit=sellTakeProfit)
+
+// Vẽ Bollinger Bands
+plot(basis, color=#666666, title="Basis")
+plot(upper, color=#666666, title="Upper Band")
+plot(lower, color=#666666, title="Lower Band")
