@@ -1,0 +1,675 @@
+// tác giả : Nguyễn Xuân Hưng
+// ngày hoàn thành: 8/3/2025
+// IG : https://www.instagram.com/ng_xhung_/
+//@version=5
+indicator("KZ_B20_HTFC", overlay=true)
+showSession  = input(true, "ASR-B20", group="BUTTON")
+HTF = input.bool(false, 'HTF Candles ON/OFF', inline = 'overlayLine1', group = 'BUTTON')
+ShowSR = input(false, "Supply and Demand", inline = 'overlayLine2', group = 'BUTTON')
+//===== Inputs - Session C 
+show_sesc    = input(true, "", inline="sesc", group="Session")
+sesc_txt     = input("Tokyo", "", inline="sesc", group="Session")
+sesc_ses     = input.session("2000-0000", "", inline="sesc", group="Session")
+sesc_css     = input.color(#ffffff93, "", inline="sesc", group="Session")
+sesc_range   = input(true, "Range", inline="sesc", group="Session")
+//===== Inputs - Session A
+show_sesa  = input(true, "",inline="sesa", group="Session")
+sesa_txt   = input("London", "",inline="sesa", group="Session")
+sesa_ses   = input.session("0200-0500", "",inline="sesa", group="Session")
+sesa_css   = input.color(#ffffff93, "",inline="sesa", group="Session")
+sesa_range = input(true, "Range",inline="sesa", group="Session")
+//===== Inputs - Session B
+show_sesb  = input(true, "",inline="sesb", group="Session")
+sesb_txt   = input("New York", "",inline="sesb", group="Session")
+sesb_ses   = input.session("0930-1100", "",inline="sesb", group="Session")
+sesb_css   = input.color(#ffffff93, "",inline="sesb" ,group="Session")
+sesb_range = input(true, "Range",inline="sesb" ,group="Session")
+onlyTody     = input(true, "chỉ hiện ngày hôm nay", group="Session")
+sesc_maxmin  = input(false, "Max/Min", group="Session")
+//===== Inputs - Timezone & Ranges Options =====
+tz_incr      = input.int(-4, "UTC (+/-)", group="Timezone", inline="EntryTime")
+use_exchange = input(true, "Dùng giờ của chart", group="EntryTime")
+bg_transp    = input.float(100, "Độ mờ của Range", group="Ranges Settings")
+show_outline = input(true, "Viền Range", group="Ranges Settings")
+show_txt     = input(true, "Tên Phiên", group="Ranges Settings")
+//===== Functions =====
+n = bar_index
+
+set_line(force_overlay, session, y1, y2, session_css)=>
+    var line tl = na
+    if session > session[1]
+        tl := line.new(n, close, n, close, color=session_css, force_overlay=force_overlay)
+    if session and session == session[1]
+        line.set_y1(tl, y1)
+        line.set_xy2(tl, n, y2)
+
+get_range(session, session_name, session_css, force_overlay)=>
+    var t       = 0 
+    var max_val = high
+    var min_val = low
+    var box bx  = na
+    var label lbl = na 
+    if session > session[1]
+        t       := time
+        max_val := high
+        min_val := low
+        bx := box.new(n, max_val, n, min_val, 
+              bgcolor = color.new(session_css, bg_transp), 
+              border_color = show_outline ? session_css : na, 
+              border_style = line.style_dotted, 
+              force_overlay = force_overlay)
+        if show_txt
+            lbl := label.new(t, max_val, session_name,
+              xloc = xloc.bar_time,
+              textcolor = session_css,
+              style = label.style_label_down,
+              color = color.new(color.white, 100),
+              size = size.tiny,
+              force_overlay = force_overlay)
+    if session and session == session[1]
+        max_val := math.max(high, max_val)
+        min_val := math.min(low, min_val)
+        box.set_top(bx, max_val)
+        box.set_rightbottom(bx, n, min_val)
+        if show_txt
+            label.set_xy(lbl, int(math.avg(t, time)), max_val)
+    [session ? na : max_val, session ? na : min_val]
+
+//===== Timezone Setup =====
+tf = timeframe.period
+var tz = use_exchange ? syminfo.timezone : str.format("UTC{0}{1}", tz_incr >= 0 ? "+" : "-", math.abs(tz_incr))
+
+//===== Sessions =====
+is_sesc = math.sign(nz(time(tf, sesc_ses, tz)))
+is_sesa = math.sign(nz(time(tf, sesa_ses, tz)))
+is_sesb = math.sign(nz(time(tf, sesb_ses, tz)))
+
+//===== Vẽ Range - Session C =====
+var float max_sesc = na
+var float min_sesc = na
+if show_sesc and sesc_range and showSession
+    [maxC, minC] = get_range(is_sesc, sesc_txt, sesc_css, true)
+    max_sesc := maxC
+    min_sesc := minC
+
+//===== Vẽ Range - Session A =====
+var float max_sesa = na
+var float min_sesa = na
+if show_sesa and sesa_range and showSession
+    [maxA, minA] = get_range(is_sesa, sesa_txt, sesa_css, true)
+    max_sesa := maxA
+    min_sesa := minA
+
+//===== Vẽ Range - Session B =====
+var float max_sesb = na
+var float min_sesb = na
+if show_sesb and sesb_range and showSession
+    [maxB, minB] = get_range(is_sesb, sesb_txt, sesb_css, true)
+    max_sesb := maxB
+    min_sesb := minB
+
+//===== Tính toán mức Fibonacci của Session C =====
+fibonacci_target3      = max_sesc + (max_sesc - min_sesc) * 3.236
+fibonacci_target2      = max_sesc + (max_sesc - min_sesc) * 1.618
+fibonacci_target1      = max_sesc + (max_sesc - min_sesc) * 0.618
+fibonacci_target3_down = min_sesc - (max_sesc - min_sesc) * 3.236
+fibonacci_target2_down = min_sesc - (max_sesc - min_sesc) * 1.618
+fibonacci_target1_down = min_sesc - (max_sesc - min_sesc) * 0.618
+
+isToday = year == year(timenow) and month == month(timenow) and dayofmonth == dayofmonth(timenow)
+isToday := onlyTody ? isToday : true
+drawnArrow = false
+bardaaw = 0
+bardaaw := bardaaw[1] != 0 ? bardaaw[1] : 0
+if hour == 1 and minute == 00
+    bardaaw := time
+
+uptrend = -1
+uptrend := close > max_sesc ? 2 : close < min_sesc ? 1 : 0
+
+//===== Vẽ các mức Fibonacci (Session C) =====
+if close < min_sesc and isToday
+    var isDraw = line.new(x1=bardaaw, y1=min_sesc, x2=bardaaw, y2=fibonacci_target1_down, color=#a1a1a1, width=1, style=line.style_arrow_right, xloc=xloc.bar_time, force_overlay=true)
+    line.new(x1=bardaaw, y1=min_sesc, x2=bardaaw, y2=fibonacci_target2_down, color=#a1a1a1, width=1, style=line.style_arrow_right, xloc=xloc.bar_time, force_overlay=true)
+    line.new(x1=bardaaw, y1=fibonacci_target1_down, x2=time, y2=fibonacci_target1_down, color=#858585, width=1, style=line.style_solid, xloc=xloc.bar_time, force_overlay=true)
+    line.new(x1=bardaaw, y1=fibonacci_target2_down, x2=time, y2=fibonacci_target2_down, color=#858585, width=1, style=line.style_solid, xloc=xloc.bar_time, force_overlay=true)
+    string tp2 = "Tp2: " + str.tostring(fibonacci_target2_down)
+    string tp1 = "Tp1: " + str.tostring(fibonacci_target1_down)
+    label.new(x=bardaaw, y=fibonacci_target2_down, style=label.style_label_right, color=color.rgb(100,100,100,100), size=size.small, xloc=xloc.bar_time, text=tp2, textcolor=#a1a1a1, force_overlay=true)
+    label.new(x=bardaaw, y=fibonacci_target1_down, style=label.style_label_right, color=color.rgb(100,100,100,100), size=size.small, xloc=xloc.bar_time, text=tp1, textcolor=#a1a1a1, force_overlay=true)
+    if close < fibonacci_target2_down 
+        line.new(x1=bardaaw, y1=fibonacci_target2_down, x2=bardaaw, y2=fibonacci_target3_down, color=#a1a1a1, width=1, style=line.style_arrow_right, xloc=xloc.bar_time, force_overlay=true)
+        line.new(x1=bardaaw, y1=fibonacci_target3_down, x2=time, y2=fibonacci_target3_down, color=#a1a1a1, width=1, style=line.style_solid, xloc=xloc.bar_time, force_overlay=true)
+
+if close > max_sesc and isToday
+    isDraw = line.new(x1=bardaaw, y1=max_sesc, x2=bardaaw, y2=fibonacci_target1, color=#a1a1a1, width=1, style=line.style_arrow_right, xloc=xloc.bar_time, force_overlay=true)
+    line.new(x1=bardaaw, y1=max_sesc, x2=bardaaw, y2=fibonacci_target2, color=#a1a1a1, width=1, style=line.style_arrow_right, xloc=xloc.bar_time, force_overlay=true)
+    line.new(x1=bardaaw, y1=fibonacci_target1, x2=time, y2=fibonacci_target1, color=#858585, width=1, style=line.style_solid, xloc=xloc.bar_time, force_overlay=true)
+    line.new(x1=bardaaw, y1=fibonacci_target2, x2=time, y2=fibonacci_target2, color=#858585, width=1, style=line.style_solid, xloc=xloc.bar_time, force_overlay=true)
+    string tp2 = "Tp2: " + str.tostring(fibonacci_target2)
+    string tp1 = "Tp1: " + str.tostring(fibonacci_target1)
+    label.new(x=bardaaw, y=fibonacci_target2, style=label.style_label_right, color=color.rgb(100,100,100,100), size=size.small, xloc=xloc.bar_time, text=tp2, textcolor=#a1a1a1, force_overlay=true)
+    label.new(x=bardaaw, y=fibonacci_target1, style=label.style_label_right, color=color.rgb(100,100,100,100), size=size.small, xloc=xloc.bar_time, text=tp1, textcolor=#a1a1a1, force_overlay=true)
+    if close > fibonacci_target2
+        line.new(x1=bardaaw, y1=fibonacci_target2, x2=bardaaw, y2=fibonacci_target3, color=#a1a1a1, width=1, style=line.style_arrow_right, xloc=xloc.bar_time, force_overlay=true)
+        line.new(x1=bardaaw, y1=fibonacci_target3, x2=time, y2=fibonacci_target3, color=#a1a1a1, width=1, style=line.style_solid, xloc=xloc.bar_time, force_overlay=true)
+
+//===== Vẽ plot max/min (nếu được bật) cho Session C =====
+plot(sesc_maxmin ? max_sesc : na, "Session C Maximum", sesc_css, 1, plot.style_linebr, force_overlay=true)
+plot(sesc_maxmin ? min_sesc : na, "Session C Minimum", sesc_css, 1, plot.style_linebr, force_overlay=true)
+//=====================================================================================================================================================
+//=====================================================================================================================================================
+//=====================================================================================================================================================
+//=====================================================================================================================================================
+//=====================================================================================================================================================
+//=====================================================================================================================================================
+//////////////////////////// HTF //////////////////////////////////////////
+
+var tf1 = input.timeframe("1440", "Timeframe", inline="tf", group="Settings")
+var tf_auto = input.bool(true, "Set Automatically", inline="tf", group = "Settings")
+var tf_2lvs = input.bool(false, "Two Levels", inline="tf", group = "Settings")
+var num = input.int(15, "Number of HTF Candles", minval=1, group="Settings")
+var offset = input.int(20, "Offset", group="Settings")
+var size = input.string("Small", "Size", options = ["Small", "Medium", "Large"], group = "Settings")
+var margin = input.int(1, "Margin", minval=1, group="Settings")
+var htf_data_always = input.bool(false, "Always use HTF data to generate candles", group = "Settings")
+var htf_data_weekly = input.bool(true, "Use HTF data to generate candles on Weekly timeframe", group = "Settings")
+var up_col = input.color(color.new(#b2b5be, 0), "Body", inline="Candles", group="Up Candles")
+var up_col_wick = input.color(#b2b5be, "Wick", inline="Candles", group="Up Candles")
+var up_col_border = input.color(#b2b5be, "Border", inline="Candles", group="Up Candles")
+var down_col = input.color(color.new(#505050, 0), "Body", inline="Candles", group="Down Candles")
+var down_col_wick = input.color(#505050, "Wick", inline="Candles", group="Down Candles")
+var down_col_border = input.color(#505050, "Border", inline="Candles", group="Down Candles")
+var o_col = input.color(color.new(color.black,5), "", inline="o", group = "Projections")
+var o_style = input.string("Dotted", "", options = ["Solid", "Dotted", "Dashed"], inline = "o", group = "Projections")
+var o_width = input.int(1, "Width", minval=1, inline="o", group = "Projections")
+var o_enabled = input.bool(true, "Open", inline="o", group = "Projections")
+var hl_col = input.color(color.new(color.black,5), "", inline = "hl", group = "Projections")
+var hl_style = input.string("Dotted", "", options = ["Solid", "Dotted", "Dashed"], inline = "hl", group = "Projections")
+var hl_width = input.int(1, "Width",minval=1, inline="hl", group = "Projections")
+var hl_enabled = input.bool(true, "High/Low",inline="hl", group = "Projections")
+var ohlc_col = input.color(color.new(color.black,5), "", inline = "ohlc", group = "Projections")
+var ohlc_size = input.string("Tiny", "", options = ["Auto", "Tiny", "Small", "Normal", "Large", "Huge"], inline = "ohlc", group = "Projections")
+var ohlc_enabled = input.bool(false, "OHLC Prices",inline="ohlc", group = "Projections")
+
+type Candle
+    box body
+    line upperWick
+    line lowerWick
+    line o
+    line h
+    line l
+    label lableO
+    label lableH
+    label lableL
+    label lableC
+
+getAutoTimeframe(s, m5, m15, m60, m240, m, d, w, q, y) =>
+    timeframe.isseconds ? s :
+     timeframe.isminutes ? 
+      timeframe.multiplier < 5 ? m5 : 
+      timeframe.multiplier < 15 ? m15 : 
+      timeframe.multiplier < 60 ? m60 :
+      timeframe.multiplier < 240 ? m240 : m :
+     timeframe.isdaily ? d :
+     timeframe.isweekly ? w :
+     timeframe.ismonthly and timeframe.multiplier < 6 ? q : y  
+determineAutoTimeframe() =>
+    if tf_2lvs
+        getAutoTimeframe('5', '15', '60', '240', '1D', '1W', '1M', '3M', '12M', '12M')
+    else
+        getAutoTimeframe('15','15','60','240','D','D','W','M','3M','12M')
+
+getSizeMultiplier() =>
+    result = switch size
+        "Small" => 1
+        "Medium" => 2
+        "Large" => 3
+    result
+
+getLineStyle(style) =>
+    result = switch style
+        "Solid" => line.style_solid
+        "Dotted" => line.style_dotted
+        "Dashed" => line.style_dashed
+    result
+
+getLableSize() =>
+    result = switch ohlc_size
+        "Auto" => size.auto
+        "Tiny" => size.tiny
+        "Small" => size.small
+        "Normal" => size.normal
+        "Large" => size.large
+        "Huge" => size.huge
+    result
+
+var maxIndex = num - 1
+var curr_tf = tf_auto ? determineAutoTimeframe() : tf1
+var useHtfData = (timeframe.isweekly and htf_data_weekly) or htf_data_always
+var sizeMultiplier = getSizeMultiplier()
+newCandle = ta.change(time(curr_tf)) != 0
+
+ohlc() =>
+    [htf_o, htf_h, htf_l, htf_c] = request.security(syminfo.tickerid, curr_tf, [open, high, low, close], lookahead=barmerge.lookahead_on)
+      
+    var o  = 0.
+    var h  = 0.
+    var l  = 0.
+    c  = close
+
+    if newCandle
+        o := open
+        h := high
+        l := low
+    else
+        h  := math.max(high, h)
+        l  := math.min(low , l)
+    
+    [o, h, l, c, htf_o, htf_h, htf_l, htf_c]
+
+getCandlePostion(l_pos) =>
+    m_pos = l_pos + sizeMultiplier
+    r_pos = l_pos + (sizeMultiplier * 2)
+    [m_pos, r_pos]
+
+createLabel(r_pos, s) =>
+    label.new(r_pos, s, str.tostring(s, format.mintick), style = label.style_label_left, color = color.new(color.black,100), textcolor = ohlc_col, size =  getLableSize())
+
+createLabels(Candle candle, o, h, l, c, l_pos) =>
+    if ohlc_enabled    
+        [m_pos, r_pos] = getCandlePostion(l_pos)
+        candle.lableO := createLabel(r_pos, o)
+        candle.lableH := createLabel(r_pos, h)
+        candle.lableL := createLabel(r_pos, l)
+        candle.lableC := createLabel(r_pos, c)
+
+moveLable(label la, r_pos, s) =>
+    la.set_text(str.tostring(s, format.mintick))
+    la.set_xy(r_pos, s)
+
+moveLables(Candle candle, l_pos, o, h, l, c) =>
+    [m_pos, r_pos] = getCandlePostion(l_pos)
+    moveLable(candle.lableO, r_pos, o)
+    moveLable(candle.lableH, r_pos, h)
+    moveLable(candle.lableL, r_pos, l)
+    moveLable(candle.lableC, r_pos, c)
+
+deleteLabels(Candle candle) =>
+    candle.lableO.delete()
+    candle.lableH.delete()
+    candle.lableL.delete()
+    candle.lableC.delete()
+
+createProjections(Candle candle, o, h, l, curr_o, curr_h, curr_l, htf_o, htf_h, htf_l, l_pos) =>
+    [m_pos, r_pos] = getCandlePostion(l_pos)
+    b_o = bar_index
+    b_h = bar_index
+    b_l = bar_index
+    o_o = o
+    o_h = h
+    o_l = l
+    if useHtfData
+        if htf_o != o
+            b_o := b_o - 1
+            o_o := curr_o
+        if htf_h != h
+            b_h := b_h - 1
+            o_h := curr_h
+        if htf_l != l
+            b_l := b_l - 1
+            o_l := curr_l
+
+    if o_enabled
+        candle.o := line.new(b_o, o_o, m_pos, o_o, style = getLineStyle(o_style), color = o_col, width = o_width)
+    if hl_enabled 
+        candle.h := line.new(b_h, o_h, m_pos, o_h, style = getLineStyle(hl_style), color = hl_col, width = hl_width)
+        candle.l := line.new(b_l, o_l, m_pos, o_l, style = getLineStyle(hl_style), color = hl_col, width = hl_width)
+
+moveProjections(Candle candle, l_pos, o, h, l, curr_o, curr_h, curr_l) =>
+    [m_pos, r_pos] = getCandlePostion(l_pos)
+    candle.o.set_y1(curr_o)
+    candle.o.set_xy2(m_pos, curr_o)
+    old_h = candle.h.get_y1()
+    old_l = candle.l.get_y1()
+
+    if h > old_h or (useHtfData and h[1] < old_h)
+        candle.h.set_x1(bar_index)
+    candle.h.set_y1(curr_h)
+    candle.h.set_xy2(m_pos, curr_h)
+
+    if l < old_l or (useHtfData and l[1] > old_l)
+        candle.l.set_x1(bar_index)
+    candle.l.set_y1(curr_l)
+    candle.l.set_xy2(m_pos, curr_l)
+
+deleteProjections(Candle candle) =>
+    candle.o.delete()
+    candle.h.delete()
+    candle.l.delete()
+
+getCandleProperties(o, h, l, c) =>
+    h_body = math.max(o,c)
+    l_body = math.min(o,c)
+    body_col = o > c ? down_col : up_col
+    wick_col = o > c ? down_col_wick : up_col_wick
+    border_col = o > c ? down_col_border : up_col_border
+    [h_body, l_body, body_col, wick_col, border_col]
+
+createCandle(l_pos, o, h, l, c) =>
+    [m_pos, r_pos] = getCandlePostion(l_pos)
+    [h_body, l_body, body_col, wick_col, border_col] = getCandleProperties(o, h, l, c)
+    candle = Candle.new()
+    candle.body := box.new(l_pos, h_body, r_pos, l_body, border_col, bgcolor = body_col)
+    candle.upperWick := line.new(m_pos, h_body, m_pos, h, color = wick_col)
+    candle.lowerWick := line.new(m_pos, l_body, m_pos, l, color = wick_col)
+    candle
+
+moveCandle(Candle candle, l_pos) =>
+    [m_pos, r_pos] = getCandlePostion(l_pos)
+    candle.body.set_left(l_pos)
+    candle.body.set_right(r_pos)
+    candle.upperWick.set_x1(m_pos)
+    candle.upperWick.set_x2(m_pos)
+    candle.lowerWick.set_x1(m_pos)
+    candle.lowerWick.set_x2(m_pos)
+
+updateCandle(Candle candle, l_pos, o, h, l, c) =>
+    [m_pos, r_pos] = getCandlePostion(l_pos)
+    [h_body, l_body, body_col, wick_col, border_col] = getCandleProperties(o, h, l, c)
+    candle.body.set_bgcolor(body_col)
+    candle.body.set_lefttop(l_pos, h_body)
+    candle.body.set_rightbottom(r_pos, l_body)
+    candle.body.set_border_color(border_col)
+    candle.upperWick.set_color(wick_col)
+    candle.upperWick.set_xy1(m_pos, h_body)
+    candle.upperWick.set_xy2(m_pos, h)
+    candle.lowerWick.set_color(wick_col)
+    candle.lowerWick.set_xy1(m_pos, l_body)
+    candle.lowerWick.set_xy2(m_pos, l)
+
+deleteCandle(Candle candle) =>
+    candle.body.delete()
+    candle.upperWick.delete()
+    candle.lowerWick.delete()
+    deleteLabels(candle)
+    deleteProjections(candle)
+
+var candles = array.new<Candle>(num, Candle.new())
+[o,h,l,c, htf_o, htf_h, htf_l, htf_c] = ohlc()
+curr_o = o
+curr_h = h
+curr_l = l
+curr_c = c
+
+if HTF?useHtfData:na
+    curr_o := htf_o
+    curr_h := htf_h
+    curr_l := htf_l
+    curr_c := htf_c
+
+if HTF?newCandle:na
+    oldCandle = candles.shift()
+    deleteCandle(oldCandle)
+    pos = bar_index + offset + maxIndex * (3 + sizeMultiplier)
+    candle = createCandle(pos, curr_o, curr_h, curr_l, curr_c)
+    createProjections(candle, o, h, l, curr_o, curr_h, curr_l, htf_o, htf_h, htf_l, pos)
+    createLabels(candle, curr_o, curr_h, curr_l, curr_c, pos)
+    candles.push(candle)
+
+for [i, candle] in candles
+    new_pos = bar_index + offset + i * (margin + (2 * sizeMultiplier))
+    if i < maxIndex
+        moveCandle(candle, new_pos)
+        deleteProjections(candle) 
+        deleteLabels(candle)
+    else
+        updateCandle(candle, new_pos, curr_o, curr_h, curr_l, curr_c)
+        moveProjections(candle, new_pos, o, h, l, curr_o, curr_h, curr_l)
+        moveLables(candle, new_pos, curr_o, curr_h, curr_l, curr_c)
+
+
+
+//////////////////////////// SUPPLY AND DEMAND/////////////////////////////////
+
+
+//      INDICATOR SETTINGS
+swing_length = input.int(5, title = 'Swing High/Low Length', group = "👉 SUPPLY AND DEMAND", minval = 1, maxval = 50)
+history_of_demand_to_keep = input.int(30, title = 'History To Keep',group =  "👉 SUPPLY AND DEMAND" ,minval = 5, maxval = 50)
+box_width = input.float(10, title = 'Supply/Demand Box Width', group = "👉 SUPPLY AND DEMAND", minval = 1, maxval = 10, step = 0.5)
+
+//      INDICATOR VISUAL SETTINGS
+show_zigzag = input.bool(false, title = 'Show Zig Zag', group = 'Visual Settings', inline = '1')
+show_price_action_labels = input.bool(false, title = 'Show Price Action Labels', group = 'Visual Settings', inline = '2')
+
+supply_color = input.color(color.new(#807878, 85), title = 'SELL ZONE', group = 'Visual Settings', inline = '3')
+supply_outline_color = input.color(color.new(#ffffff, 100), title = 'Outline', group = 'Visual Settings', inline = '3')
+
+demand_color = input.color(color.new(#807878,85), title = 'BUY ZONE', group = 'Visual Settings', inline = '4')
+demand_outline_color = input.color(color.new(#ffffff, 100), title = 'Outline', group = 'Visual Settings', inline = '4')
+
+bos_label_color = input.color(color.rgb(255, 255, 255, 100), title = 'BOS Label', group = 'Visual Settings', inline = '5')
+poi_label_color = input.color(color.rgb(255, 255, 255,50), title = 'POI Label', group = 'Visual Settings', inline = '7')
+
+swing_type_color = input.color(color.black, title = 'Price Action Label', group = 'Visual Settings', inline = '8')
+zigzag_color = input.color(color.new(#000000,0), title = 'Zig Zag', group = 'Visual Settings', inline = '9')
+
+//
+//END SETTINGS
+//
+
+
+//
+//FUNCTIONS
+//
+
+//      FUNCTION TO ADD NEW AND REMOVE LAST IN ARRAY
+f_array_add_pop(array, new_value_to_add) =>
+    array.unshift(array, new_value_to_add)
+    array.pop(array)
+
+//      FUNCTION SWING H & L LABELS
+f_sh_sl_labels(array, swing_type) =>
+
+    var string label_text = na
+    if swing_type == 1
+        if array.get(array, 0) >= array.get(array, 1)
+            label_text := 'HH'
+        else
+            label_text := 'LH'
+        label.new(bar_index - swing_length, array.get(array,0), text = label_text, style=label.style_label_down, textcolor = swing_type_color, color = color.new(swing_type_color, 100), size = size.tiny)
+    
+    else if swing_type == -1
+        if array.get(array, 0) >= array.get(array, 1)
+            label_text := 'HL'
+        else
+            label_text := 'LL'
+        label.new(bar_index - swing_length, array.get(array,0), text = label_text, style=label.style_label_up, textcolor = swing_type_color, color = color.new(swing_type_color, 100), size = size.tiny)
+
+//      FUNCTION MAKE SURE SUPPLY ISNT OVERLAPPING
+f_check_overlapping(new_poi, box_array, atr7) =>
+
+    atr_threshold = atr7 * 2
+    okay_to_draw = true
+
+    for i = 0 to array.size(box_array) - 1
+        top = box.get_top(array.get(box_array, i))
+        bottom = box.get_bottom(array.get(box_array, i))
+        poi = (top + bottom) / 2
+
+        upper_boundary = poi + atr_threshold
+        lower_boundary = poi - atr_threshold
+
+        if new_poi >= lower_boundary and new_poi <= upper_boundary
+            okay_to_draw := false
+            break
+        else 
+            okay_to_draw := true
+    okay_to_draw
+
+
+//      FUNCTION TO DRAW SUPPLY OR DEMAND ZONE
+f_supply_demand(value_array, bn_array, box_array, label_array, box_type, atr7) =>
+
+    atr_buffer = atr7 * (box_width / 10)
+    box_left = array.get(bn_array, 0)
+    box_right = bar_index
+
+    var float box_top = 0.00
+    var float box_bottom = 0.00
+    var float poi = 0.00
+
+
+    if box_type == 1
+        box_top := array.get(value_array, 0)
+        box_bottom := box_top - atr_buffer
+        poi := (box_top + box_bottom) / 2
+    else if box_type == -1
+        box_bottom := array.get(value_array, 0)
+        box_top := box_bottom + atr_buffer
+        poi := (box_top + box_bottom) / 2
+
+    okay_to_draw = f_check_overlapping(poi, box_array, atr7)
+    // okay_to_draw = true
+
+    //delete oldest box, and then create a new box and add it to the array
+    if box_type == 1 and okay_to_draw
+        box.delete( array.get(box_array, array.size(box_array) - 1) )
+        f_array_add_pop(box_array, box.new( left = box_left, top = box_top, right = box_right, bottom = box_bottom, border_color = supply_outline_color,
+             bgcolor = ShowSR?supply_color:na, extend = extend.right, text = 'SELL ZONE', text_halign = text.align_center, text_valign = text.align_center, text_color = ShowSR?poi_label_color:na, text_size = size.small, xloc = xloc.bar_index))
+        
+        box.delete( array.get(label_array, array.size(label_array) - 1) )
+        f_array_add_pop(label_array, box.new( left = box_left, top = poi, right = box_right, bottom = poi, border_color = ShowSR?color.new(poi_label_color,90):na,
+             bgcolor = ShowSR?color.new(poi_label_color,90):na, extend = extend.right, text_halign = text.align_left, text_valign = text.align_center, text_color = ShowSR?poi_label_color:na, text_size = size.small, xloc = xloc.bar_index))
+
+    else if box_type == -1 and okay_to_draw
+        box.delete( array.get(box_array, array.size(box_array) - 1) )
+        f_array_add_pop(box_array, box.new( left = box_left, top = box_top, right = box_right, bottom = box_bottom, border_color = demand_outline_color,
+             bgcolor = ShowSR?demand_color:na, extend = extend.right,  text = 'BUY ZONE', text_halign = text.align_center, text_valign = text.align_center, text_color = ShowSR?poi_label_color:na, text_size = size.small, xloc = xloc.bar_index))
+        
+        box.delete( array.get(label_array, array.size(label_array) - 1) )
+        f_array_add_pop(label_array, box.new( left = box_left, top = poi, right = box_right, bottom = poi, border_color = ShowSR?color.new(poi_label_color,90):na,
+             bgcolor = ShowSR?color.new(poi_label_color,90):na, extend = extend.right, text_halign = text.align_left, text_valign = text.align_center, text_color = ShowSR?poi_label_color:na, text_size = size.small, xloc = xloc.bar_index))
+
+
+//      FUNCTION TO CHANGE SUPPLY/DEMAND TO A BOS IF BROKEN
+f_sd_to_bos(box_array, bos_array, label_array, zone_type) =>
+
+    if zone_type == 1
+        for i = 0 to array.size(box_array) - 1
+            level_to_break = box.get_top(array.get(box_array,i))
+            // if ta.crossover(close, level_to_break)
+            if close >= level_to_break
+                copied_box = box.copy(array.get(box_array,i))
+                f_array_add_pop(bos_array, copied_box)
+                mid = (box.get_top(array.get(box_array,i)) + box.get_bottom(array.get(box_array,i))) / 2
+                box.set_top(array.get(bos_array,0), mid)
+                box.set_bottom(array.get(bos_array,0), mid)
+                box.set_extend( array.get(bos_array,0), extend.none)
+                box.set_right( array.get(bos_array,0), bar_index)
+                box.set_text( array.get(bos_array,0), 'BOS' )
+                box.set_text_color( array.get(bos_array,0), bos_label_color)
+                box.set_text_size( array.get(bos_array,0), size.small)
+                box.set_text_halign( array.get(bos_array,0), text.align_center)
+                box.set_text_valign( array.get(bos_array,0), text.align_center)
+                box.delete(array.get(box_array, i))
+                box.delete(array.get(label_array, i))
+
+
+    if zone_type == -1
+        for i = 0 to array.size(box_array) - 1
+            level_to_break = box.get_bottom(array.get(box_array,i))
+            // if ta.crossunder(close, level_to_break)
+            if close <= level_to_break
+                copied_box = box.copy(array.get(box_array,i))
+                f_array_add_pop(bos_array, copied_box)
+                mid = (box.get_top(array.get(box_array,i)) + box.get_bottom(array.get(box_array,i))) / 2
+                box.set_top(array.get(bos_array,0), mid)
+                box.set_bottom(array.get(bos_array,0), mid)
+                box.set_extend( array.get(bos_array,0), extend.none)
+                box.set_right( array.get(bos_array,0), bar_index)
+                box.set_text( array.get(bos_array,0), 'BOS' )
+                box.set_text_color( array.get(bos_array,0), bos_label_color)
+                box.set_text_size( array.get(bos_array,0), size.small)
+                box.set_text_halign( array.get(bos_array,0), text.align_center)
+                box.set_text_valign( array.get(bos_array,0), text.align_center)
+                box.delete(array.get(box_array, i))
+                box.delete(array.get(label_array, i))
+
+
+
+//      FUNCTION MANAGE CURRENT BOXES BY CHANGING ENDPOINT
+f_extend_box_endpoint(box_array) =>
+
+    for i = 0 to array.size(box_array) - 1
+        box.set_right(array.get(box_array, i), bar_index + 100)
+
+
+//
+//END FUNCTIONS
+//  
+
+
+//
+//CALCULATIONS
+//
+
+//      CALCULATE ATR 
+atr7 = ta.atr(50)
+
+//      CALCULATE SWING HIGHS & SWING LOWS
+swing_high = ta.pivothigh(high, swing_length, swing_length)
+swing_low = ta.pivotlow(low, swing_length, swing_length)
+
+//      ARRAYS FOR SWING H/L & BN 
+var swing_high_values = array.new_float(5,0.00)
+var swing_low_values = array.new_float(5,0.00)
+
+var swing_high_bns = array.new_int(5,0)
+var swing_low_bns = array.new_int(5,0)
+
+//      ARRAYS FOR SUPPLY / DEMAND
+var current_supply_box = array.new_box(history_of_demand_to_keep, na)
+var current_demand_box = array.new_box(history_of_demand_to_keep, na)
+
+//      ARRAYS FOR SUPPLY / DEMAND POI LABELS
+var current_supply_poi = array.new_box(history_of_demand_to_keep, na)
+var current_demand_poi = array.new_box(history_of_demand_to_keep, na)
+
+//      ARRAYS FOR BOS
+var supply_bos = array.new_box(5, na)
+var demand_bos = array.new_box(5, na)
+//
+//END CALCULATIONS
+//
+
+//      NEW SWING HIGH
+if not na(swing_high)
+
+    //MANAGE SWING HIGH VALUES
+    f_array_add_pop(swing_high_values, swing_high)
+    f_array_add_pop(swing_high_bns, bar_index[swing_length])
+    if show_price_action_labels
+        f_sh_sl_labels(swing_high_values, 1)
+
+    f_supply_demand(swing_high_values, swing_high_bns, current_supply_box, current_supply_poi, 1, atr7)
+
+//      NEW SWING LOW
+else if not na(swing_low)
+
+    //MANAGE SWING LOW VALUES
+    f_array_add_pop(swing_low_values, swing_low)
+    f_array_add_pop(swing_low_bns, bar_index[swing_length])
+    if show_price_action_labels
+        f_sh_sl_labels(swing_low_values, -1)
+    
+    f_supply_demand(swing_low_values, swing_low_bns, current_demand_box, current_demand_poi, -1, atr7)
+
+
+f_sd_to_bos(current_supply_box, supply_bos, current_supply_poi, 1)
+f_sd_to_bos(current_demand_box, demand_bos, current_demand_poi, -1)
+
+f_extend_box_endpoint(current_supply_box)
+f_extend_box_endpoint(current_demand_box)
+
+////////////////////////////////////
