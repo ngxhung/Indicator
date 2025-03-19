@@ -2,7 +2,7 @@
 // © BigBeluga
 //
 //@version=5
-indicator("BigBeluga - Smart Money Concepts", "BigBeluga - Smart Money Concepts [1.0.0]", 
+indicator("SMC", 
      overlay = true, 
      max_bars_back = 5000, 
      max_boxes_count = 500, 
