@@ -1,0 +1,168 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ChartPrime
+
+//@version=5
+indicator("RSI  Ghost", overlay = false, explicit_plot_zorder = true)
+
+method is_even(simple int n)=> n % 2 == 0
+sinc(float x)=> x == 0 ? 1 : math.sin(math.pi * x) / (math.pi * x)
+blackman(float n, int length)=> 0.42 - 0.5 * math.cos((2 * math.pi * n) / (length - 1)) + 0.08 * math.cos((4 * math.pi * n) / (length - 1))
+mid_point(int x)=> (x - 1) / 2
+offset(simple int length)=> (length - 1) / 2
+
+get_data(float source, simple int length)=>
+    var float[] data = array.new<float>()
+    if data.size() < length
+        data.unshift(source)
+        data
+    else
+        data.unshift(source)
+        data.pop()
+        data
+
+sinc_coefficients(simple int length, float fc)=>
+    float[] coefficients = array.new<float>()
+    int mid = mid_point(length)
+    float cutoff = 1 / fc
+    for i = 0 to length - 1
+        int n = i - mid
+        int k = i
+        int M = length
+        if length.is_even()
+            float coefficient = sinc(2 * cutoff * n) * blackman(k + 0.5, M)
+            coefficients.push(coefficient)
+        else
+            float coefficient = sinc(2 * cutoff * n) * blackman(k, M)
+            coefficients.push(coefficient)
+    coefficients
+
+toeplitz_matrix_valid(float[] coefficients, int M)=>
+    int N = coefficients.size()
+    int rows = M - N + 1
+    matrix<float> toeplitz = matrix.new<float>(rows, M, 0)
+    for r = 0 to rows - 1
+        for c = 0 to N - 1
+            if (c + r) < M
+                toeplitz.set(r, c + r, coefficients.get(c))
+            else
+                break
+    toeplitz
+
+convolution(float[] data, float[] coefficients)=>
+    var float normalize = coefficients.sum()
+    var matrix<float> toeplitz_matrix = toeplitz_matrix_valid(coefficients, data.size())
+    float convolved = matrix.mult(toeplitz_matrix, data).first()
+    convolved / normalize
+
+lti_sinc(series float source, simple int length, simple float fc = 100)=>
+    float[] data = get_data(source, length)
+    var float[] coefficients = sinc_coefficients(length, fc)
+    if bar_index > length
+        convolved = convolution(data, coefficients)
+    else
+        float(na)
+
+ema(series float source, simple float length)=>
+    float alpha = 2.0 / (length + 1)
+    var float smoothed = na
+    smoothed := alpha * source + (1.0 - alpha) * nz(smoothed[1], source)
+
+dema(series float source, simple float length)=>
+    float ema1 = ema(source, length)
+    float ema2 = ema(ema1, length)
+    2.0 * ema1 - ema2
+
+tema(series float source, simple float length)=>
+    float ema1 = ema(source, length)
+    float ema2 = ema(ema1, length)
+    float ema3 = ema(ema2, length)
+    (ema1 - ema2) * 3.0 + ema3
+
+wma(series float source, simple int length)=>
+    var float weight_sum = length * 0.5 * (length + 1)
+    float sum = 0.0
+    for int i = 0 to length - 1
+        sum += source[i] * (length - i)
+    sum / weight_sum
+
+sma(series float source, simple int length)=>
+    float sum = ta.cum(source)
+    if bar_index < length - 1
+        sum / (bar_index + 1)
+    else
+        (sum - sum[length]) / length
+
+color_changer(color source, bool direction)=>
+    float r = color.r(source)
+    float g = color.g(source)
+    float b = color.b(source)
+    if direction
+        color.rgb((255 - r) / 3 + r, (255 - g) / 3 + g, (255 - b) / 3 + b)
+    else
+        color.rgb(r / 1.5, g / 1.5, b / 1.5)
+
+// Đầu vào
+const string settings = "Settings"
+float source = input.source(close, "Source", group = settings)
+
+const string style = "Style"
+bool enable_projection = input.bool(true, "Ghost Mode", group = style)
+color momentum_color = input.color(#e4e4e4, "màu rsi", group = style)
+color ma_color = input.color(#1848cc, "màu ema 9", group = style)
+color wma_color = input.color(#999999, "màu wma 45", group = style)
+
+//bool glow = input.bool(true, "Glow", group = style)
+
+// Tính toán cơ bản
+float delta = ta.rsi(source, 14)
+float ma = ta.ema(delta, 9)
+float wma = ta.wma(delta,45)
+float diff = delta - ma
+float projection = math.avg(delta - delta[1], (delta - delta[2]) / 2)
+float ma_project = math.avg(ma - ma[1], (ma - ma[2]) / 2)
+float wma_project = math.avg(wma - wma[1], (wma - wma[2])/2)
+// Vẽ các thành phần
+hline(80,color =#50505050 ,linestyle = hline.style_solid)
+hline(68,color =#50505050 ,linestyle = hline.style_solid)
+hline(50,color =#50505050 ,linestyle = hline.style_solid)
+hline(32,color =#50505050 ,linestyle = hline.style_solid)
+hline(20,color =#50505050 ,linestyle = hline.style_solid)
+plot(ma, "EMA9", ma_color)
+//a = plot(glow ? ma : na, "MA Glow", color.new(ma_color, 80), 4, display = display.pane)
+plot(delta, "RSI", momentum_color)
+//b = plot(glow ? delta : na, "Momentum Glow", color.new(momentum_color, 80), 4, display = display.pane)
+//fill(a, b, color.new(delta > ma ? momentum_color : ma_color, 90), "Momentum Fill", editable = true)
+plot(wma,"WMA",color =wma_color)
+// Cơ chế Ghost Mode
+var float p_ma1 = na
+var float p_ma2 = na
+var float p_m1 = na
+var float p_m2 = na
+var float p_wma1 = na
+var float p_wma2 = na
+if enable_projection
+    p_ma1 := ma + ma_project
+    p_m1 := delta + projection
+    p_wma1 := wma + wma_project
+    p_ma2 := ma + ma_project * 2
+    p_m2 := delta + projection * 2
+    p_wma2 := wma + wma_project * 2
+
+
+    var line project_delta = line.new(na, na, na, na, color = momentum_color, style = line.style_dotted)
+    var line project_ma = line.new(na, na, na, na, color = ma_color, style = line.style_dotted)
+    var line project_wma = line.new(na, na, na, na, color =wma_color, style = line.style_dotted)
+    project_ma.set_xy1(bar_index, ma)
+    project_ma.set_xy2(bar_index + 2, p_ma2)
+    
+    project_delta.set_xy1(bar_index, delta)
+    project_delta.set_xy2(bar_index + 2, p_m2)
+
+    project_wma.set_xy1(bar_index,wma)
+    project_wma.set_xy2(bar_index+2,p_wma2)
+
+
+plot(ta.ema(close,21),color = #575757,force_overlay = true)
+plot(ta.ema(close,34),color = #707070,force_overlay = true)
+plot(ta.ema(close,50),color = #e4e4e4,force_overlay = true)
+plot(ta.ema(close,200),color = #1848cc,force_overlay = true)
