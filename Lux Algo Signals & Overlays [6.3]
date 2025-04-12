@@ -1485,37 +1485,25 @@ plot(showMovingAverage ? perf_ama : na, 'Trailing Stop AMA', ta.cross(close, per
 // barcolor(showGradient ? color.from_gradient(perf_idx, 0, 1, color.new(css, 80), css) : na)
 
 // Signals
-if showSignals
-    // Điều kiện BUY
-    buyCondition = os > os[1] and 
-        (signalPresets != "Smart Trail [Filter]" or (close > supert)) and 
-        (signalPresets != "Trend Tracer [Filter]" or trendTracerDirection == #02ff65) and 
-        (signalPresets != "Trend Strength [Filter]" or trendStrengthMetric >= 25) and 
-        (signalPresets != "Trend Catcher [Filter]" or newTrendCatcherColor == #02ff65) and 
-        (signalPresets != "Neo Cloud [Filter]" or int(lastNeo) >= last5Neo)
+// Điều kiện BUY và SELL gộp 1 dòng để tránh lỗi xuống dòng
+buyCondition = showSignals and os > os[1] and (signalPresets != "Smart Trail [Filter]" or (close > supert)) and (signalPresets != "Trend Tracer [Filter]" or trendTracerDirection == #02ff65) and (signalPresets != "Trend Strength [Filter]" or trendStrengthMetric >= 25) and (signalPresets != "Trend Catcher [Filter]" or newTrendCatcherColor == #02ff65) and (signalPresets != "Neo Cloud [Filter]" or int(lastNeo) >= last5Neo)
 
-    if buyCondition
-        int signalStrength = int(perf_idx * 10) < 2 ? 1 : int(perf_idx * 10) < 4 ? 2 : int(perf_idx * 10) < 5 ? 3 : 4
-        label.new(n, low - ta.atr(30) / 2, signalClassifier ? str.tostring(signalStrength) : ema50 > ema200 ? "▲+" : "▲", color = bullCss, style = label.style_label_up, textcolor = color.white, yloc = yloc.belowbar, size = size.small)
-        position := 1
+sellCondition = showSignals and os < os[1] and (signalPresets != "Smart Trail [Filter]" or (close < supert)) and (signalPresets != "Trend Tracer [Filter]" or trendTracerDirection != #02ff65) and (signalPresets != "Trend Strength [Filter]" or trendStrengthMetric >= 25) and (signalPresets != "Trend Catcher [Filter]" or newTrendCatcherColor != #02ff65) and (signalPresets != "Neo Cloud [Filter]" or int(lastNeo) <= last5Neo)
 
-    // Điều kiện SELL
-    sellCondition = os < os[1] and 
-        (signalPresets != "Smart Trail [Filter]" or (close < supert)) and 
-        (signalPresets != "Trend Tracer [Filter]" or trendTracerDirection != #02ff65) and 
-        (signalPresets != "Trend Strength [Filter]" or trendStrengthMetric >= 25) and 
-        (signalPresets != "Trend Catcher [Filter]" or newTrendCatcherColor != #02ff65) and 
-        (signalPresets != "Neo Cloud [Filter]" or int(lastNeo) <= last5Neo)
+// Hiển thị label
+if buyCondition
+    int signalStrength = int(perf_idx * 10) < 2 ? 1 : int(perf_idx * 10) < 4 ? 2 : int(perf_idx * 10) < 5 ? 3 : 4
+    label.new(n, low - ta.atr(30) / 2, signalClassifier ? str.tostring(signalStrength) : ema50 > ema200 ? "▲+" : "▲", color = bullCss, style = label.style_label_up, textcolor = color.white, yloc = yloc.belowbar, size = size.small)
+    position := 1
 
-    if sellCondition
-        int signalStrength = int(perf_idx * 10) < 2 ? 1 : int(perf_idx * 10) < 4 ? 2 : int(perf_idx * 10) < 5 ? 3 : 4
-        label.new(n, high + ta.atr(30) / 2, signalClassifier ? str.tostring(signalStrength) : ema50 < ema200 ? "▼+" : "▼", color = bearCss, style = label.style_label_down, textcolor = color.white, yloc = yloc.abovebar, size = size.small)
-        position := -1
+if sellCondition
+    int signalStrength = int(perf_idx * 10) < 2 ? 1 : int(perf_idx * 10) < 4 ? 2 : int(perf_idx * 10) < 5 ? 3 : 4
+    label.new(n, high + ta.atr(30) / 2, signalClassifier ? str.tostring(signalStrength) : ema50 < ema200 ? "▼+" : "▼", color = bearCss, style = label.style_label_down, textcolor = color.white, yloc = yloc.abovebar, size = size.small)
+    position := -1
 
-// === ALERTS ===
+// ALERTS
 alertcondition(buyCondition, title="Buy Signal", message="Tín hiệu BUY xuất hiện!")
 alertcondition(sellCondition, title="Sell Signal", message="Tín hiệu SELL xuất hiện!")
-
 // =======================
 
 // Signal Plots
